@@ -1,0 +1,27 @@
+RBMK Nuclear Reactor Simulator — Free Use License
+
+Copyright (c) the project's copyright holder(s). All rights reserved except
+as expressly granted below.
+
+You may download, install, build, and use unmodified copies of this project
+free of charge, for personal, educational, research, or commercial purposes.
+
+You may not modify or create derivative works of the project's own software,
+source code, or other project materials without prior written permission from
+the applicable copyright holder, except where applicable law permits such
+activity notwithstanding this restriction. This license does not grant
+permission to redistribute the project outside GitHub; request written
+permission from the copyright holder to do so.
+
+This license applies only to project materials owned by its copyright holders.
+Third-party components, including Qt and any bundled dependencies, remain
+subject to their own licenses. Nothing in this license limits rights granted
+under an applicable third-party license or by applicable law. Rights relating
+to viewing and forking a public repository on GitHub are governed by GitHub's
+applicable terms of service.
+
+THE PROJECT IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+PURPOSE, AND NON-INFRINGEMENT. TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE
+COPYRIGHT HOLDERS ARE NOT LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY
+ARISING FROM OR IN CONNECTION WITH THE PROJECT OR ITS USE.

@@ -28,9 +28,14 @@ reactor dynamics and human–machine interaction.
 
 ![Cold-shutdown control room showing inserted rods and low power](docs/control-room-cold.png)
 
-These images were generated with the application's automated screenshot mode. That
-mode exercises controls before capture, so the displayed selections and settings are
-not necessarily the untouched preset defaults. Values can vary between runs.
+### Control room — simulated meltdown
+
+![Control room showing the simulated core destroyed after a meltdown](docs/control-room-meltdown.png)
+
+These images were generated with the application's automated screenshot mode. The
+nominal and cold captures exercise controls, so displayed selections and settings are
+not necessarily the untouched preset defaults. The meltdown capture uses the automated
+demonstration scenario. Values can vary between runs.
 
 ## Overview
 
@@ -196,10 +201,15 @@ should be treated as illustrative rather than predictions of a real plant.
 
 ## License and reuse
 
-No project license is currently included. Please contact the repository owner for
-permission before copying, modifying, or redistributing the project; adding an explicit
-license will clarify the terms for educational and research reuse. Qt and other build or
-runtime dependencies have their own licensing requirements.
+The simulator is free to use, including for commercial, educational, and research
+purposes. Modifying the project's own code or materials requires prior written
+permission from the applicable copyright holder, subject to applicable law. The
+license does not grant redistribution rights outside GitHub. See [LICENSE](LICENSE)
+for the full terms and contact the repository owner to request permission.
+
+This is source-available proprietary software, not an open-source license. Qt and
+other third-party components have their own licenses and may grant additional rights
+or impose distribution obligations independently of the project license.
 
 ## Source layout
 
