@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RBMK-1000 Advanced Reactor Core Simulator</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        reactor: {
+                            dark: '#0a0d14',
+                            panel: '#121824',
+                            border: '#1e293b',
+                            accent: '#38bdf8',
+                            danger: '#ef4444',
+                            warning: '#f59e0b',
+                            success: '#10b981',
+                            cyan: '#06b6d4'
+                        }
+                    },
+                    fontFamily: {
+                        mono: ['Courier New', Courier, monospace]
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+        
+        body {
+            font-family: 'Share Tech Mono', monospace;
+            background-color: #07090e;
+            color: #cbd5e1;
+        }
+
+        /* Scanlines overlay for control room aesthetic */
+        .scanlines {
+            background: linear-gradient(
+                rgba(18, 24, 36, 0) 50%, 
+                rgba(0, 0, 0, 0.25) 50%
+            ), linear-gradient(
+                90deg,
+                rgba(255, 0, 0, 0.03),
+                rgba(0, 255, 0, 0.01),
+                rgba(0, 0, 255, 0.03)
+            );
+            background-size: 100% 4px, 6px 100%;
+            pointer-events: none;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+
+        @keyframes pulse-glow {
+            0%, 100% { filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.8)); }
+            50% { filter: drop-shadow(0 0 20px rgba(239, 68, 68, 1)); }
+        }
+        .critical-glow {
+            animation: pulse-glow 0.8s infinite;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col relative select-none overflow-x-hidden">
+
+    <!-- Scanline effect layer -->
+    <div class="absolute inset-0 scanlines z-50 fixed"></div>
+
+    <!-- Top Header Bar -->
+    <header class="bg-reactor-panel border-b border-reactor-border px-4 py-3 flex flex-wrap items-center justify-between z-40 shadow-lg">
+        <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded bg-cyan-950 border border-cyan-500/50 flex items-center justify-center text-cyan-400 font-bold text-lg shadow-[0_0_10px_rgba(6,182,212,0.3)]">
+                <i class="fa-solid fa-atom animate-spin" style="animation-duration: 8s;"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold text-cyan-400 tracking-wider flex items-center gap-2">
+                    RBMK-1000 ELENA <span class="text-xs px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800">CORE SIMULATOR v4.2</span>
+                </h1>
+                <p class="text-xs text-slate-400">Upper Biological Shield (IZ-250) Top-Down Telemetry & Control</p>
+            </div>
+        </div>
+
+        <!-- System Status Banner & Quick Stats -->
+        <div class="flex items-center space-x-4 mt-2 sm:mt-0">
+            <div id="systemStatusBadge" class="px-3 py-1 rounded text-xs font-bold uppercase tracking-wider bg-emerald-950 text-emerald-400 border border-emerald-600/50 flex items-center gap-2 shadow-[0_0_10px_rgba(16,185,129,0.2)]">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span id="statusText">NORMAL OPERATION</span>
+            </div>
+
+            <div class="hidden md:flex items-center space-x-3 text-xs border-l border-slate-700 pl-4">
+                <div>
+                    <span class="text-slate-400 block">SIM TIME</span>
+                    <span id="simClock" class="text-slate-200 font-mono">00:00:00</span>
+                </div>
+                <div>
+                    <span class="text-slate-400 block">XENON POISON</span>
+                    <span id="xenonVal" class="text-cyan-400 font-mono">2.4%</span>
+                </div>
+            </div>
+
+            <!-- Sound & Mute Toggle -->
+            <button onclick="toggleAudio()" id="audioBtn" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded text-xs border border-slate-700 transition flex items-center gap-1.5">
+                <i class="fa-solid fa-volume-high text-cyan-400" id="audioIcon"></i>
+                <span id="audioText">Sound ON</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Application Container -->
+    <main class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 z-10 max-w-[1700px] w-full mx-auto">
+
+        <!-- LEFT COLUMN: SVG Core Top-Down View (7 cols on lg) -->
+        <div class="lg:col-span-7 flex flex-col bg-reactor-panel border border-reactor-border rounded-xl p-4 shadow-xl relative overflow-hidden">
+            
+            <div class="flex items-center justify-between mb-3 border-b border-slate-800 pb-2">
+                <div class="flex items-center space-x-2">
+                    <i class="fa-solid fa-compass-drafting text-cyan-400"></i>
+                    <h2 class="text-sm font-bold tracking-wide text-slate-200 uppercase">Reactor Core Grid (Top-Down View)</h2>
+                </div>
+                <div class="flex items-center space-x-2 text-xs">
+                    <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-sm bg-cyan-600 inline-block"></span> Fuel</span>
+                    <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-sm bg-amber-500 inline-block"></span> Control Rod</span>
+                    <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-sm bg-emerald-600 inline-block"></span> Water/Reflector</span>
+                    <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-sm bg-red-600 inline-block"></span> Hot/Critical</span>
+                </div>
+            </div>
+
+            <!-- SVG Container -->
+            <div class="flex-1 flex items-center justify-center relative min-h-[420px] bg-reactor-dark rounded-lg border border-slate-800/80 overflow-hidden p-2">
+                
+                <!-- SVG Reactor Core -->
+                <svg id="reactorSvg" viewBox="0 0 600 600" class="w-full h-full max-h-[550px] transition-transform duration-300">
+                    <defs>
+                        <!-- Glow filter for critical or hot channels -->
+                        <filter id="coreGlow" x="-50%" y="-50%" width="200%" height="200%">
+                            <feGaussianBlur stdDeviation="4" result="blur" />
+                            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                        </filter>
+                        <!-- Radial Gradient for Shield Border -->
+                        <radialGradient id="shieldGrad" cx="50%" cy="50%" r="50%">
+                            <stop offset="70%" stop-color="#1e293b" />
+                            <stop offset="90%" stop-color="#334155" />
+                            <stop offset="100%" stop-color="#0f172a" />
+                        </radialGradient>
+                    </defs>
+
+                    <!-- Outer Biological Shield (IZ-250 Circular Drum) -->
+                    <circle cx="300" cy="300" r="280" fill="url(#shieldGrad)" stroke="#475569" stroke-width="8" />
+                    <!-- Inner Steel Structure Ring -->
+                    <circle cx="300" cy="300" r="260" fill="#090d16" stroke="#1e293b" stroke-width="4" stroke-dasharray="10, 5" />
+
+                    <!-- Coordinate Grid Labels Around Perimeter -->
+                    <g fill="#64748b" font-size="10" font-family="monospace" text-anchor="middle">
+                        <!-- Letters A-N top/bottom and numbers 1-14 left/right -->
+                        <text x="300" y="32">A</text>
+                        <text x="300" y="580">N</text>
+                        <text x="25" y="304">1</text>
+                        <text x="580" y="304">14</text>
+                    </g>
+
+                    <!-- Dynamic SVG Channels Group (Generated by JavaScript) -->
+                    <g id="channelsGroup">
+                        <!-- Channels inserted dynamically -->
+                    </g>
+
+                    <!-- Central Control Mechanism Overlay Ring -->
+                    <circle cx="300" cy="300" r="80" fill="none" stroke="#38bdf8" stroke-width="1.5" stroke-dasharray="4, 4" opacity="0.4" />
+                    <circle cx="300" cy="300" r="30" fill="none" stroke="#ef4444" stroke-width="2" opacity="0.6" />
+                </svg>
+
+                <!-- Floating Zoom / Reset helper -->
+                <div class="absolute bottom-3 right-3 flex items-center space-x-1 bg-slate-900/90 border border-slate-700 p-1 rounded backdrop-blur">
+                    <button onclick="resetSvgZoom()" title="Reset View" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-xs rounded text-slate-300">
+                        <i class="fa-solid fa-compress"></i> Reset
+                    </button>
+                </div>
+            </div>
+
+            <!-- Core Legend & Quick Status Hint -->
+            <div class="mt-3 text-xs text-slate-400 flex items-center justify-between">
+                <span><i class="fa-solid fa-circle-info text-cyan-400 mr-1"></i> Click any channel block above to inspect local parameters.</span>
+                <span id="selectedChannelLabel" class="text-cyan-300 font-semibold">Selected: None (Core Aggregate View)</span>
+            </div>
+        </div>
+
+        <!-- RIGHT COLUMN: Control Room Dash & Telemetry (5 cols on lg) -->
+        <div class="lg:col-span-5 flex flex-col space-y-4">
+            
+            <!-- SCRAM & Emergency Command Panel -->
+            <div class="bg-reactor-panel border border-reactor-border rounded-xl p-4 shadow-xl">
+                <div class="flex items-center justify-between mb-3 border-b border-slate-800 pb-2">
+                    <div class="flex items-center space-x-2">
+                        <i class="fa-solid fa-triangle-exclamation text-amber-500"></i>
+                        <h2 class="text-sm font-bold tracking-wide text-slate-200 uppercase">Emergency Safety System</h2>
+                    </div>
+                    <span class="text-xs text-slate-400 font-mono">AZ-5 PROTECTIVE</span>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <!-- SCRAM Button -->
+                    <button id="scramBtn" onclick="triggerScram()" class="col-span-1 bg-gradient-to-r from-red-700 to-red-600 hover:from-red-600 hover:to-red-500 text-white font-bold py-3 px-4 rounded-lg border-2 border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.5)] flex flex-col items-center justify-center transition transform active:scale-95 group">
+                        <span class="text-sm tracking-wider uppercase flex items-center gap-1.5"><i class="fa-solid fa-radiation animate-spin text-lg"></i> SCRAM (AZ-5)</span>
+                        <span class="text-[10px] text-red-200 font-normal">Instant Rod Drop</span>
+                    </button>
+
+                    <!-- Reset / Normalizer Button -->
+                    <button onclick="resetReactor()" class="col-span-1 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold py-3 px-4 rounded-lg border border-slate-700 flex flex-col items-center justify-center transition active:scale-95">
+                        <span class="text-sm tracking-wider uppercase flex items-center gap-1.5"><i class="fa-solid fa-rotate-right"></i> Reset Core</span>
+                        <span class="text-[10px] text-slate-400 font-normal">Restore Baseline</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Real-Time Telemetry Gauges -->
+            <div class="bg-reactor-panel border border-reactor-border rounded-xl p-4 shadow-xl">
+                <div class="flex items-center justify-between mb-3 border-b border-slate-800 pb-2">
+                    <div class="flex items-center space-x-2">
+                        <i class="fa-solid fa-gauge-high text-cyan-400"></i>
+                        <h2 class="text-sm font-bold tracking-wide text-slate-200 uppercase">Core Telemetry & Instrumentation</h2>
+                    </div>
+                    <span class="text-xs text-cyan-400 font-mono" id="telemetryStatus">LIVE</span>
+                </div>
+
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <!-- Power Output -->
+                    <div class="bg-reactor-dark p-3 rounded-lg border border-slate-800 flex flex-col">
+                        <span class="text-[11px] text-slate-400 uppercase tracking-wider">Thermal Power</span>
+                        <div class="flex items-baseline space-x-1 mt-1">
+                            <span id="powerVal" class="text-xl font-bold text-cyan-400 font-mono">1000</span>
+                            <span class="text-xs text-slate-400">MWt</span>
+                        </div>
+                        <div class="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
+                            <div id="powerBar" class="bg-cyan-500 h-full w-full transition-all duration-300"></div>
+                        </div>
+                    </div>
+
+                    <!-- Core Temp -->
+                    <div class="bg-reactor-dark p-3 rounded-lg border border-slate-800 flex flex-col">
+                        <span class="text-[11px] text-slate-400 uppercase tracking-wider">Avg Core Temp</span>
+                        <div class="flex items-baseline space-x-1 mt-1">
+                            <span id="tempVal" class="text-xl font-bold text-emerald-400 font-mono">320.5</span>
+                            <span class="text-xs text-slate-400">°C</span>
+                        </div>
+                        <div class="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
+                            <div id="tempBar" class="bg-emerald-500 h-full w-1/2 transition-all duration-300"></div>
+                        </div>
+                    </div>
+
+                    <!-- Pressure -->
+                    <div class="bg-reactor-dark p-3 rounded-lg border border-slate-800 flex flex-col">
+                        <span class="text-[11px] text-slate-400 uppercase tracking-wider">Coolant Press.</span>
+                        <div class="flex items-baseline space-x-1 mt-1">
+                            <span id="pressVal" class="text-xl font-bold text-slate-200 font-mono">70.2</span>
+                            <span class="text-xs text-slate-400">atm</span>
+                        </div>
+                        <div class="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
+                            <div id="pressBar" class="bg-blue-500 h-full w-2/3 transition-all duration-300"></div>
+                        </div>
+                    </div>
+
+                    <!-- Coolant Flow -->
+                    <div class="bg-reactor-dark p-3 rounded-lg border border-slate-800 flex flex-col">
+                        <span class="text-[11px] text-slate-400 uppercase tracking-wider">Coolant Flow</span>
+                        <div class="flex items-baseline space-x-1 mt-1">
+                            <span id="flowVal" class="text-xl font-bold text-cyan-400 font-mono">100</span>
+                            <span class="text-xs text-slate-400">%</span>
+                        </div>
+                        <div class="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
+                            <div id="flowBar" class="bg-cyan-500 h-full w-full transition-all duration-300"></div>
+                        </div>
+                    </div>
+
+                    <!-- Reactivity -->
+                    <div class="bg-reactor-dark p-3 rounded-lg border border-slate-800 flex flex-col">
+                        <span class="text-[11px] text-slate-400 uppercase tracking-wider">Reactivity ($\beta$)</span>
+                        <div class="flex items-baseline space-x-1 mt-1">
+                            <span id="reactivityVal" class="text-xl font-bold text-amber-400 font-mono">+0.00</span>
+                            <span class="text-xs text-slate-400">Δk/k</span>
+                        </div>
+                        <div class="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
+                            <div id="reactivityBar" class="bg-amber-500 h-full w-1/2 transition-all duration-300"></div>
+                        </div>
+                    </div>
+
+                    <!-- Neutron Flux -->
+                    <div class="bg-reactor-dark p-3 rounded-lg border border-slate-800 flex flex-col">
+                        <span class="text-[11px] text-slate-400 uppercase tracking-wider">Neutron Flux</span>
+                        <div class="flex items-baseline space-x-1 mt-1">
+                            <span id="fluxVal" class="text-xl font-bold text-purple-400 font-mono">1.2e13</span>
+                            <span class="text-xs text-slate-400">n/cm²s</span>
+                        </div>
+                        <div class="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
+                            <div id="fluxBar" class="bg-purple-500 h-full w-1/2 transition-all duration-300"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Control Rod Management & Feedwater Pumps -->
+            <div class="bg-reactor-panel border border-reactor-border rounded-xl p-4 shadow-xl space-y-4">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                    <div class="flex items-center space-x-2">
+                        <i class="fa-solid fa-sliders text-cyan-400"></i>
+                        <h2 class="text-sm font-bold tracking-wide text-slate-200 uppercase">Reactivity & Cooling Controls</h2>
+                    </div>
+                </div>
+
+                <!-- Control Rod Slider -->
+                <div class="space-y-1.5">
+                    <div class="flex justify-between text-xs">
+                        <span class="text-slate-300">Control Rod Insertion Depth</span>
+                        <span id="rodValLabel" class="text-cyan-400 font-mono font-bold">50%</span>
+                    </div>
+                    <input type="range" id="rodSlider" min="0" max="100" value="50" oninput="onRodSliderChange(this.value)" class="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-500">
+                    <div class="flex justify-between text-[10px] text-slate-500">
+                        <span>0% (Fully Withdrawn / Max Power)</span>
+                        <span>100% (Fully Inserted / Subcritical)</span>
+                    </div>
+                </div>
+
+                <!-- Fine Tuning & Coolant Pumps Grid -->
+                <div class="grid grid-cols-2 gap-3 pt-2 border-t border-slate-800">
+                    <!-- Rod Fine Control -->
+                    <div class="flex flex-col space-y-1.5">
+                        <span class="text-xs text-slate-300 font-medium">Fine Rod Adjust</span>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="adjustRods(-5)" class="bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 rounded py-1.5 text-xs transition active:scale-95 font-semibold">
+                                <i class="fa-solid fa-arrow-up mr-1"></i> Withdraw
+                            </button>
+                            <button onclick="adjustRods(5)" class="bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 rounded py-1.5 text-xs transition active:scale-95 font-semibold">
+                                <i class="fa-solid fa-arrow-down mr-1"></i> Insert
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Coolant Pumps Toggle -->
+                    <div class="flex flex-col space-y-1.5">
+                        <span class="text-xs text-slate-300 font-medium">Feedwater Pumps (MCP)</span>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button id="pumpToggleBtn" onclick="togglePumps()" class="col-span-2 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-600/50 rounded py-1.5 text-xs transition font-semibold flex items-center justify-center gap-1.5">
+                                <i class="fa-solid fa-power-off text-emerald-400" id="pumpIcon"></i>
+                                <span id="pumpText">Pumps: 4/4 ACTIVE</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Selected Channel Inspection Panel -->
+            <div id="inspectorPanel" class="bg-reactor-panel border border-reactor-border rounded-xl p-4 shadow-xl hidden">
+                <div class="flex items-center justify-between mb-3 border-b border-slate-800 pb-2">
+                    <div class="flex items-center space-x-2">
+                        <i class="fa-solid fa-microscope text-cyan-400"></i>
+                        <h2 class="text-sm font-bold tracking-wide text-slate-200 uppercase">Channel Inspector: <span id="inspCoord" class="text-cyan-400 font-mono">G-07</span></h2>
+                    </div>
+                    <button onclick="closeInspector()" class="text-slate-400 hover:text-slate-200 text-xs px-2 py-0.5 rounded bg-slate-800">Close</button>
+                </div>
+                <div class="grid grid-cols-3 gap-2 text-xs">
+                    <div class="bg-reactor-dark p-2.5 rounded border border-slate-800">
+                        <span class="text-slate-400 block text-[10px]">CHANNEL TYPE</span>
+                        <span id="inspType" class="text-slate-200 font-bold">Fuel Channel</span>
+                    </div>
+                    <div class="bg-reactor-dark p-2.5 rounded border border-slate-800">
+                        <span class="text-slate-400 block text-[10px]">LOCAL TEMP</span>
+                        <span id="inspTemp" class="text-emerald-400 font-bold font-mono">315.4 °C</span>
+                    </div>
+                    <div class="bg-reactor-dark p-2.5 rounded border border-slate-800">
+                        <span class="text-slate-400 block text-[10px]">NEUTRON FLUX</span>
+                        <span id="inspFlux" class="text-purple-400 font-bold font-mono">1.1e13</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- Footer Console Log Ticker -->
+    <footer class="bg-reactor-panel border-t border-reactor-border px-4 py-2 mt-auto z-40 flex items-center justify-between text-xs">
+        <div class="flex items-center space-x-2 truncate">
+            <span class="text-cyan-400 font-bold flex items-center gap-1"><i class="fa-solid fa-terminal"></i> EVENT LOG:</span>
+            <span id="eventLogText" class="text-slate-300 truncate">System initialized successfully. Core operational at 1000 MWt. All primary pumps online.</span>
+        </div>
+        <div class="text-[10px] text-slate-500 hidden sm:block font-mono">
+            RBMK-IZ250 SIMULATOR // WEB AUDIO API ENABLED
+        </div>
+    </footer>
+
+    <!-- JavaScript Simulator Engine -->
+    <script>
+        /* --- Audio & Synthesizer Engine --- */
+        let audioCtx = null;
+        let soundEnabled = true;
+        let alarmOsc = null;
+        let alarmGain = null;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        function playClickSound() {
+            if (!soundEnabled) return;
+            initAudio();
+            try {
+                let osc = audioCtx.createOscillator();
+                let gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(400, audioCtx.currentTime + 0.05);
+                gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.05);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.05);
+            } catch(e) {}
+        }
+
+        function toggleAudio() {
+            soundEnabled = !soundEnabled;
+            const icon = document.getElementById('audioIcon');
+            const text = document.getElementById('audioText');
+            if (soundEnabled) {
+                icon.className = "fa-solid fa-volume-high text-cyan-400";
+                text.innerText = "Sound ON";
+                playClickSound();
+            } else {
+                icon.className = "fa-solid fa-volume-xmark text-slate-500";
+                text.innerText = "Sound OFF";
+                if (alarmOsc) {
+                    stopAlarm();
+                }
+            }
+        }
+
+        function startAlarm() {
+            if (!soundEnabled || alarmOsc) return;
+            initAudio();
+            try {
+                alarmOsc = audioCtx.createOscillator();
+                alarmGain = audioCtx.createGain();
+                alarmOsc.type = 'sawtooth';
+                alarmOsc.frequency.setValueAtTime(440, audioCtx.currentTime);
+                // Modulate frequency for siren effect
+                let lfo = audioCtx.createOscillator();
+                let lfoGain = audioCtx.createGain();
+                lfo.frequency.setValueAtTime(2, audioCtx.currentTime);
+                lfoGain.gain.setValueAtTime(200, audioCtx.currentTime);
+                lfo.connect(alarmOsc.frequency);
+                lfo.start();
+
+                alarmGain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+                alarmOsc.connect(alarmGain);
+                alarmGain.connect(audioCtx.destination);
+                alarmOsc.start();
+            } catch(e) {}
+        }
+
+        function stopAlarm() {
+            if (alarmOsc) {
+                try {
+                    alarmOsc.stop();
+                    alarmOsc.disconnect();
+                    alarmOsc = null;
+                } catch(e) {}
+            }
+        }
+
+        /* --- Simulator State Variables --- */
+        let simState = {
+            power: 1000,       // MWt (0 - 3200)
+            temp: 320.5,       // °C (20 - 1200)
+            pressure: 70.2,    // atm
+            flow: 100,         // % (0 - 100)
+            reactivity: 0.00,  // delta k/k
+            flux: 1.2e13,      // n/cm2s
+            rodInsertion: 50,  // % (0 = withdrawn, 100 = fully inserted)
+            pumpsActive: true,
+            scrammed: false,
+            xenon: 2.4,        // %
+            timeSeconds: 0
+        };
+
+        let channels = [];
+        let selectedChannel = null;
+        const GRID_SIZE = 18; // 18x18 grid inside the circular biological shield
+
+        /* Initialize SVG Core Channels */
+        function initReactorCore() {
+            const group = document.getElementById('channelsGroup');
+            group.innerHTML = '';
+            channels = [];
+
+            const radius = 250;
+            const cx = 300;
+            const cy = 300;
+            const step = radius * 2 / GRID_SIZE;
+
+            const alphabet = "ABCDEFGHJKLMNOPRST";
+
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    const x = cx - radius + (c * step) + (step / 2);
+                    const y = cy - radius + (r * step) + (step / 2);
+                    const distFromCenter = Math.sqrt(Math.pow(x - cx, 2) + Math.pow(y - cy, 2));
+
+                    // Only create channels inside the circular biological shield
+                    if (distFromCenter <= 245) {
+                        const coord = `${alphabet[r]}-${c + 1}`;
+                        // Determine channel type: some control rods (approx 15%), water/reflector, rest fuel
+                        let type = 'fuel';
+                        let isControlRod = (r % 5 === 0 && c % 4 === 0) || (r === 9 && c === 9);
+                        if (isControlRod) type = 'control';
+                        else if (distFromCenter > 220) type = 'reflector';
+
+                        const channelObj = {
+                            id: coord,
+                            r: r,
+                            c: c,
+                            x: x,
+                            y: y,
+                            type: type,
+                            temp: 300 + Math.random() * 30,
+                            flux: 1.0 + Math.random() * 0.3,
+                            rodPos: simState.rodInsertion
+                        };
+                        channels.push(channelObj);
+
+                        // Render SVG Rect for channel
+                        const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+                        rect.setAttribute("x", x - (step * 0.42));
+                        rect.setAttribute("y", y - (step * 0.42));
+                        rect.setAttribute("width", step * 0.84);
+                        rect.setAttribute("height", step * 0.84);
+                        rect.setAttribute("rx", "2");
+                        rect.setAttribute("id", `chan-${coord}`);
+                        rect.setAttribute("class", "transition-colors duration-200 cursor-pointer");
+                        
+                        // Initial coloring
+                        updateChannelVisual(rect, channelObj);
+
+                        // Click event to inspect channel
+                        rect.addEventListener('click', () => {
+                            selectChannel(channelObj);
+                        });
+
+                        group.appendChild(rect);
+                    }
+                }
+            }
+        }
+
+        function updateChannelVisual(rect, ch) {
+            let fillColor = '#0e7490'; // default cyan for fuel
+            if (ch.type === 'control') {
+                fillColor = '#f59e0b'; // amber for control rod
+            } else if (ch.type === 'reflector') {
+                fillColor = '#059669'; // emerald for reflector
+            }
+
+            // Temperature coloring modulation
+            if (ch.temp > 600) {
+                fillColor = '#ef4444'; // red hot
+                if (ch.temp > 850) {
+                    rect.setAttribute("class", "transition-colors duration-200 cursor-pointer critical-glow");
+                } else {
+                    rect.setAttribute("class", "transition-colors duration-200 cursor-pointer");
+                }
+            } else if (ch.temp > 450) {
+                fillColor = '#f97316'; // orange warm
+                rect.setAttribute("class", "transition-colors duration-200 cursor-pointer");
+            }
+
+            rect.setAttribute("fill", fillColor);
+            rect.setAttribute("stroke", ch === selectedChannel ? "#38bdf8" : "#1e293b");
+            rect.setAttribute("stroke-width", ch === selectedChannel ? "2" : "0.5");
+        }
+
+        function selectChannel(ch) {
+            selectedChannel = ch;
+            playClickSound();
+            document.getElementById('inspectorPanel').classList.remove('hidden');
+            document.getElementById('selectedChannelLabel').innerText = `Selected: Channel ${ch.id}`;
+            document.getElementById('inspCoord').innerText = ch.id;
+            document.getElementById('inspType').innerText = ch.type.toUpperCase() + ' CHANNEL';
+            document.getElementById('inspTemp').innerText = ch.temp.toFixed(1) + ' °C';
+            document.getElementById('inspFlux').innerText = (ch.flux * 1e13).toExponential(1);
+            
+            // Re-render visual borders
+            channels.forEach(c => {
+                const el = document.getElementById(`chan-${c.id}`);
+                if (el) updateChannelVisual(el, c);
+            });
+        }
+
+        function closeInspector() {
+            selectedChannel = null;
+            document.getElementById('inspectorPanel').classList.add('hidden');
+            document.getElementById('selectedChannelLabel').innerText = "Selected: None (Core Aggregate View)";
+            channels.forEach(c => {
+                const el = document.getElementById(`chan-${c.id}`);
+                if (el) updateChannelVisual(el, c);
+            });
+        }
+
+        /* --- Simulation Physics Loop (Runs every 200ms) --- */
+        function simulateTick() {
+            simState.timeSeconds += 0.2;
+
+            // Target power calculation based on rod insertion and coolant flow
+            // Rod insertion 0% = 3000 MW, 100% = 0 MW
+            let targetPower = (100 - simState.rodInsertion) * 30;
+            if (!simState.pumpsActive) {
+                targetPower *= 1.2; // without pumps core heats up and reactivity shifts
+            }
+
+            // Smooth power convergence
+            simState.power += (targetPower - simState.power) * 0.1;
+            if (simState.power < 0) simState.power = 0;
+
+            // Reactivity calculation
+            simState.reactivity = ((50 - simState.rodInsertion) / 500) + (Math.sin(simState.timeSeconds * 0.1) * 0.001);
+
+            // Temperature calculation
+            let coolingEffect = simState.pumpsActive ? (simState.flow / 100) * 2.5 : 0.2;
+            let heatGen = (simState.power / 1000) * 45;
+            let targetTemp = 280 + (heatGen / coolingEffect);
+            simState.temp += (targetTemp - simState.temp) * 0.05;
+
+            // Pressure calculation
+            let targetPress = 60 + (simState.temp / 20);
+            if (!simState.pumpsActive) targetPress += 35;
+            simState.pressure += (targetPress - simState.pressure) * 0.08;
+
+            // Neutron Flux calculation
+            simState.flux = (simState.power / 1000) * 1.2e13 * (1 + (Math.random() * 0.04 - 0.02));
+
+            // Xenon poisoning accumulation
+            if (simState.power < 500) {
+                simState.xenon += 0.01;
+                if (simState.xenon > 15) simState.xenon = 15;
+            } else {
+                simState.xenon -= 0.005;
+                if (simState.xenon < 1.0) simState.xenon = 1.0;
+            }
+
+            // Update individual channels
+            channels.forEach(ch => {
+                let localLoad = (100 - simState.rodInsertion) / 100;
+                if (ch.type === 'control') localLoad *= 0.2;
+                ch.temp = simState.temp + (Math.random() * 20 - 10) + (localLoad * 40);
+                ch.flux = (simState.flux / 1e13) * (0.9 + Math.random() * 0.2);
+                
+                const el = document.getElementById(`chan-${ch.id}`);
+                if (el) updateChannelVisual(el, ch);
+            });
+
+            // Update inspector if open
+            if (selectedChannel) {
+                document.getElementById('inspTemp').innerText = selectedChannel.temp.toFixed(1) + ' °C';
+                document.getElementById('inspFlux').innerText = (selectedChannel.flux * 1e13).toExponential(1);
+            }
+
+            // Check for emergency / alarm states
+            const statusBadge = document.getElementById('systemStatusBadge');
+            const statusText = document.getElementById('statusText');
+
+            if (simState.temp > 750 || simState.pressure > 110) {
+                statusBadge.className = "px-3 py-1 rounded text-xs font-bold uppercase tracking-wider bg-red-950 text-red-400 border border-red-600 flex items-center gap-2 critical-glow";
+                statusText.innerText = "CRITICAL WARNING: MELTDOWN RISK";
+                startAlarm();
+                logEvent("WARNING: Core temperature or pressure exceeding safe operational limits!");
+            } else if (simState.temp > 550 || simState.scrammed) {
+                if (simState.scrammed && simState.temp < 350) {
+                    statusBadge.className = "px-3 py-1 rounded text-xs font-bold uppercase tracking-wider bg-cyan-950 text-cyan-400 border border-cyan-600 flex items-center gap-2";
+                    statusText.innerText = "SCRAM SHUTDOWN SUCCESSFUL";
+                    stopAlarm();
+                } else {
+                    statusBadge.className = "px-3 py-1 rounded text-xs font-bold uppercase tracking-wider bg-amber-950 text-amber-400 border border-amber-600 flex items-center gap-2 animate-pulse";
+                    statusText.innerText = simState.scrammed ? "SCRAM IN PROGRESS (COOLING)" : "REACTOR WARNING: HIGH TEMP";
+                    if (!simState.scrammed) startAlarm();
+                }
+            } else {
+                statusBadge.className = "px-3 py-1 rounded text-xs font-bold uppercase tracking-wider bg-emerald-950 text-emerald-400 border border-emerald-600/50 flex items-center gap-2";
+                statusText.innerText = "NORMAL OPERATION";
+                stopAlarm();
+            }
+
+            // Render UI numbers
+            renderUI();
+        }
+
+        function renderUI() {
+            // Clock
+            let totalSec = Math.floor(simState.timeSeconds);
+            let hrs = String(Math.floor(totalSec / 3600)).padStart(2, '0');
+            let mins = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
+            let secs = String(totalSec % 60).padStart(2, '0');
+            document.getElementById('simClock').innerText = `${hrs}:${mins}:${secs}`;
+
+            // Telemetry numbers & bars
+            document.getElementById('powerVal').innerText = simState.power.toFixed(0);
+            document.getElementById('powerBar').style.width = Math.min(100, (simState.power / 3200) * 100) + '%';
+
+            document.getElementById('tempVal').innerText = simState.temp.toFixed(1);
+            let tempPercent = Math.min(100, (simState.temp / 1000) * 100);
+            document.getElementById('tempBar').style.width = tempPercent + '%';
+            document.getElementById('tempBar').className = simState.temp > 600 ? "bg-red-500 h-full transition-all duration-300" : "bg-emerald-500 h-full transition-all duration-300";
+
+            document.getElementById('pressVal').innerText = simState.pressure.toFixed(1);
+            document.getElementById('pressBar').style.width = Math.min(100, (simState.pressure / 150) * 100) + '%';
+
+            document.getElementById('flowVal').innerText = simState.flow.toFixed(0);
+            document.getElementById('flowBar').style.width = simState.flow + '%';
+
+            document.getElementById('reactivityVal').innerText = (simState.reactivity >= 0 ? '+' : '') + simState.reactivity.toFixed(3);
+            document.getElementById('fluxVal').innerText = simState.flux.toExponential(1);
+            document.getElementById('xenonVal').innerText = simState.xenon.toFixed(1) + '%';
+        }
+
+        /* --- Control Functions --- */
+        function onRodSliderChange(val) {
+            simState.rodInsertion = parseFloat(val);
+            simState.scrammed = false;
+            document.getElementById('rodValLabel').innerText = val + '%';
+            playClickSound();
+            logEvent(`Control rods adjusted to ${val}% insertion.`);
+        }
+
+        function adjustRods(amount) {
+            let newVal = Math.max(0, Math.min(100, simState.rodInsertion + amount));
+            simState.rodInsertion = newVal;
+            simState.scrammed = false;
+            document.getElementById('rodSlider').value = newVal;
+            document.getElementById('rodValLabel').innerText = newVal + '%';
+            playClickSound();
+            logEvent(`Fine rod adjustment: set to ${newVal}%`);
+        }
+
+        function triggerScram() {
+            simState.rodInsertion = 100;
+            simState.scrammed = true;
+            document.getElementById('rodSlider').value = 100;
+            document.getElementById('rodValLabel').innerText = '100% (SCRAM)';
+            playClickSound();
+            startAlarm();
+            logEvent("CRITICAL ALERT: AZ-5 EMERGENCY SCRAM TRIGGERED! All control rods dropped.");
+        }
+
+        function resetReactor() {
+            simState.power = 1000;
+            simState.temp = 320.5;
+            simState.pressure = 70.2;
+            simState.flow = 100;
+            simState.rodInsertion = 50;
+            simState.scrammed = false;
+            simState.xenon = 2.4;
+            document.getElementById('rodSlider').value = 50;
+            document.getElementById('rodValLabel').innerText = '50%';
+            stopAlarm();
+            playClickSound();
+            logEvent("Reactor core reset to nominal baseline operating state.");
+        }
+
+        function togglePumps() {
+            simState.pumpsActive = !simState.pumpsActive;
+            const btn = document.getElementById('pumpToggleBtn');
+            const icon = document.getElementById('pumpIcon');
+            const text = document.getElementById('pumpText');
+            playClickSound();
+
+            if (simState.pumpsActive) {
+                btn.className = "col-span-2 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-600/50 rounded py-1.5 text-xs transition font-semibold flex items-center justify-center gap-1.5";
+                icon.className = "fa-solid fa-power-off text-emerald-400";
+                text.innerText = "Pumps: 4/4 ACTIVE";
+                simState.flow = 100;
+                logEvent("Primary coolant pumps activated (100% flow).");
+            } else {
+                btn.className = "col-span-2 bg-red-950 hover:bg-red-900 text-red-300 border border-red-600/50 rounded py-1.5 text-xs transition font-semibold flex items-center justify-center gap-1.5";
+                icon.className = "fa-solid fa-triangle-exclamation text-red-400";
+                text.innerText = "Pumps: OFFLINE (0%)";
+                simState.flow = 0;
+                logEvent("WARNING: Primary coolant pumps shut down! Core cooling compromised.");
+            }
+        }
+
+        function logEvent(msg) {
+            document.getElementById('eventLogText').innerText = msg;
+        }
+
+        function resetSvgZoom() {
+            const svg = document.getElementById('reactorSvg');
+            svg.style.transform = 'scale(1)';
+            playClickSound();
+        }
+
+        /* Initialization on window load */
+        window.onload = function() {
+            initReactorCore();
+            setInterval(simulateTick, 200); // 5 ticks per second simulation update
+        };
+    </script>
+</body>
+</html>

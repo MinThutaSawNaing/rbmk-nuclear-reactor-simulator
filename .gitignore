@@ -1,0 +1,7 @@
+build/
+build-*/
+out/
+*.user
+*.log
+rbmk-session.log
+docs/screenshot.png.bak
