@@ -1,5 +1,6 @@
 #include "ui/MainWindow.h"
 
+#include "ui/AppIcon.h"
 #include "ui/CoreView.h"
 #include "ui/GaugeCard.h"
 #include "ui/Theme.h"
@@ -245,6 +246,16 @@ QWidget *MainWindow::buildHeader()
     auto *layout = new QHBoxLayout(bar);
     layout->setContentsMargins(14, 8, 14, 8);
     layout->setSpacing(14);
+
+    // Brand badge: the same research logo used for the window, taskbar and
+    // executable icons, rasterised for this screen's device pixel ratio.
+    const int badgeSide = 38;
+    auto *badge = new QLabel;
+    badge->setObjectName(QStringLiteral("AppLogo"));
+    badge->setPixmap(appicon::logo(badgeSide, devicePixelRatioF()));
+    badge->setFixedSize(badgeSide, badgeSide);
+    badge->setToolTip(QStringLiteral("RBMK — Nuclear Reactor Simulator"));
+    layout->addWidget(badge);
 
     auto *titleBlock = new QWidget;
     auto *titleLayout = new QVBoxLayout(titleBlock);
@@ -1899,15 +1910,21 @@ real reactor physics code.</p>
 
 void MainWindow::showAbout()
 {
-    QMessageBox::about(this, QStringLiteral("About RBMK-1000 ELENA"),
-                       QStringLiteral("<h3>RBMK-1000 ELENA — core physics sandbox</h3>"
-                                      "<p>A Qt 6 / C++17 control-room simulator with "
-                                      "individually removable assemblies and independently "
-                                      "driven control rods.</p>"
-                                      "<p>Built with Qt %1 and a hand-written reactor physics "
-                                      "engine (point kinetics, xenon dynamics, void feedback, "
-                                      "two-node thermal hydraulics).</p>"
-                                      "<p style='color:#64748b'>Educational use only — not a "
-                                      "real plant model.</p>")
-                           .arg(QString::fromLatin1(qVersion())));
+    QMessageBox about(this);
+    about.setWindowTitle(QStringLiteral("About RBMK-1000 ELENA"));
+    about.setWindowIcon(appicon::windowIcon());
+    about.setIconPixmap(appicon::logo(96, devicePixelRatioF()));
+    about.setTextFormat(Qt::RichText);
+    about.setText(QStringLiteral("<h3>RBMK-1000 ELENA — core physics sandbox</h3>"
+                                 "<p>A Qt 6 / C++17 control-room simulator with "
+                                 "individually removable assemblies and independently "
+                                 "driven control rods.</p>"
+                                 "<p>Built with Qt %1 and a hand-written reactor physics "
+                                 "engine (point kinetics, xenon dynamics, void feedback, "
+                                 "two-node thermal hydraulics).</p>"
+                                 "<p style='color:#64748b'>Educational use only — not a "
+                                 "real plant model.</p>")
+                      .arg(QString::fromLatin1(qVersion())));
+    about.setStandardButtons(QMessageBox::Close);
+    about.exec();
 }

@@ -23,6 +23,7 @@ target_link_libraries(rbmk_core PUBLIC Qt6::Core)
 # --------------------------------------------------------------------- the game
 qt_add_executable(RbmkControlRoom WIN32
     src/main.cpp
+    src/ui/AppIcon.cpp
     src/ui/MainWindow.cpp
     src/ui/CoreView.cpp
     src/ui/GaugeCard.cpp
@@ -30,6 +31,32 @@ qt_add_executable(RbmkControlRoom WIN32
     src/ui/Theme.cpp
 )
 target_link_libraries(RbmkControlRoom PRIVATE rbmk_core Qt6::Widgets Qt6::Gui)
+
+# The research logo is embedded so the window/taskbar icon survives any working
+# directory, and so the About dialog and header badge share one source of truth.
+# The PNG set is produced by tools/make_icons.py from logos/rbmk_research_logo_500.png.
+set(RBMK_ICON_SIZES 16 24 32 48 64 128 256 512)
+set(RBMK_ICON_PNGS "")
+foreach(icon_size IN LISTS RBMK_ICON_SIZES)
+    list(APPEND RBMK_ICON_PNGS "assets/icons/rbmk-logo-${icon_size}.png")
+endforeach()
+qt_add_resources(RbmkControlRoom "app_icons"
+    PREFIX "/icons"
+    BASE "assets/icons"
+    FILES ${RBMK_ICON_PNGS}
+)
+
+# Windows shell integration: executable icon (Explorer, taskbar, shortcuts and
+# the installer's uninstall entry) plus the version block shown in Properties.
+if(WIN32)
+    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/rbmk.ico")
+        message(FATAL_ERROR "Missing assets/icons/rbmk.ico - run: python tools/make_icons.py")
+    endif()
+    file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/rbmk.ico" RBMK_ICON_FILE)
+    configure_file(src/win/app.rc.in "${CMAKE_CURRENT_BINARY_DIR}/app.rc" @ONLY)
+    target_sources(RbmkControlRoom PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/app.rc")
+    target_link_libraries(RbmkControlRoom PRIVATE shell32)
+endif()
 
 set_target_properties(RbmkControlRoom PROPERTIES
     OUTPUT_NAME "RBMK-Control-Room"

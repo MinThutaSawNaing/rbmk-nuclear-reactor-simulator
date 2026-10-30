@@ -1,4 +1,10 @@
+<p align="center">
+  <img src="assets/icons/rbmk-logo-256.png" alt="RBMK Nuclear Reactor Simulator logo" width="180">
+</p>
+
 # RBMK Nuclear Reactor Simulator
+
+[![Build Windows app](https://github.com/MinThutaSawNaing/rbmk-nuclear-reactor-simulator/actions/workflows/build.yml/badge.svg)](https://github.com/MinThutaSawNaing/rbmk-nuclear-reactor-simulator/actions/workflows/build.yml)
 
 **An interactive educational control-room sandbox inspired by the RBMK-1000**, built
 with C++17 and Qt 6 for students, educators, and researchers exploring simplified
@@ -9,6 +15,23 @@ reactor dynamics and human–machine interaction.
 > source of real-world operating procedures. Do not use its outputs for reactor
 > operation, engineering design, safety analysis, or quantitative research conclusions
 > without independent verification and validation against appropriate reference data.
+
+## Download
+
+You do not need Qt, CMake, or a compiler to run the simulator. Every push to `main`
+builds the Windows x64 binaries and refreshes the
+[latest build release](https://github.com/MinThutaSawNaing/rbmk-nuclear-reactor-simulator/releases/latest):
+
+| Asset | What it is |
+| --- | --- |
+| `RBMK-Control-Room-Setup-<version>.exe` | 64-bit installer: the app, its Qt runtime, the Visual C++ runtime and a Start menu shortcut |
+| `RBMK-Control-Room-<version>-win64-portable.zip` | portable bundle: unzip anywhere and run `RBMK-Control-Room.exe` |
+| `SHA256SUMS.txt` | SHA-256 checksums for both downloads |
+
+Each run also uploads the same files as workflow artifacts on the
+[Actions](https://github.com/MinThutaSawNaing/rbmk-nuclear-reactor-simulator/actions/workflows/build.yml)
+tab. The binaries are **not code-signed**, so Windows SmartScreen may ask you to confirm
+before running them. See [`LICENSE`](LICENSE) before redistributing.
 
 ## At a glance
 
@@ -97,6 +120,34 @@ the compiler used to build the application. The installer requires administrator
 rights, installs the redistributable if needed, and creates a Start menu shortcut
 with an optional desktop shortcut. The resulting installer is for 64-bit Windows.
 The installer is not digitally signed.
+
+## Branding and application icon
+
+Every icon in the product comes from one master file, `logos/rbmk_research_logo_500.png`:
+
+- `assets/icons/rbmk.ico` — multi-resolution icon (16–256 px) compiled into
+  `RBMK-Control-Room.exe`, so Explorer, the taskbar, pinned/Start menu shortcuts, the
+  uninstall entry and the setup program all show the logo. The executable also carries
+  a version block (`Properties → Details`) and its own AppUserModelID so Windows groups
+  the taskbar button correctly.
+- `assets/icons/rbmk-logo-<size>.png` — embedded in the Qt resource system and loaded by
+  `src/ui/AppIcon.cpp` for the window/taskbar icon, the header badge and the About dialog,
+  picking the size that matches the display's device pixel ratio.
+- `installer/wizard-large.bmp`, `installer/wizard-small.bmp` — Inno Setup wizard artwork.
+
+Regenerate all of them after changing the master artwork (requires Pillow):
+
+```powershell
+python tools/make_icons.py
+```
+
+## Continuous integration
+
+`.github/workflows/build.yml` runs on every push to `main`, on pull requests and on
+demand. It installs Qt, builds the Release executable, runs the unit tests, produces the
+portable ZIP and the Inno Setup installer, writes `SHA256SUMS.txt`, uploads them as
+workflow artifacts, and — for non-pull-request runs — replaces the assets of the rolling
+`latest-build` release so the download links above always serve the newest green build.
 
 ## Controls
 
@@ -217,10 +268,16 @@ or impose distribution obligations independently of the project license.
 src/core/ReactorTypes.h    channels, assemblies, telemetry, log entries
 src/core/ReactorCore.h/cpp physics engine, rod drives, assembly exchange, alarms
 src/ui/Theme.h/cpp         palette and stylesheet
+src/ui/AppIcon.h/cpp       logo-backed window/taskbar icon, header badge, About image
 src/ui/CoreView.h/cpp      painted 18x18 shield map, drag/wheel/context interaction
 src/ui/GaugeCard.h/cpp     telemetry read-out card
 src/ui/TrendChart.h/cpp    rolling power / fuel temperature / xenon strip chart
 src/ui/MainWindow.h/cpp    control room layout, menus, inspector, event log
-src/main.cpp               application entry, icon, --preset/--hold/--selftest/--screenshot
+src/main.cpp               application entry, taskbar identity, --preset/--hold/--selftest
+src/win/app.rc.in          executable icon and version block (configured by CMake)
+assets/icons/              generated PNG icon set and multi-resolution .ico
+installer/                 Inno Setup script, wizard artwork and staging script
+tools/make_icons.py        regenerates every icon from the master logo
+.github/workflows/build.yml CI: build, test, portable ZIP, installer, release upload
 tests/core_tests.cpp       QtTest suite for the physics engine
 ```

@@ -1,0 +1,155 @@
+name: Build Windows app
+
+# Every push to main builds the Qt application, the portable bundle and the
+# Inno Setup installer, then refreshes a rolling GitHub release so anyone can
+# download the newest ready-to-run build without a compiler.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  QT_VERSION: '6.8.3'
+  QT_ARCH: win64_msvc2022_64
+
+jobs:
+  windows:
+    name: Windows x64
+    runs-on: windows-latest
+    env:
+      #: Tag of the rolling release that always holds the newest artifacts.
+      RELEASE_TAG: latest-build
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Resolve project version
+        id: version
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path CMakeLists.txt -Pattern 'VERSION\s+([0-9]+\.[0-9]+\.[0-9]+)').Matches[0].Groups[1].Value
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "RBMK Control Room $version"
+
+      - name: Install Qt ${{ env.QT_VERSION }}
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          arch: ${{ env.QT_ARCH }}
+          cache: true
+
+      - name: Set up MSVC x64
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Configure
+        shell: pwsh
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR"
+
+      - name: Build
+        shell: pwsh
+        run: cmake --build build --parallel
+
+      - name: Run unit tests
+        shell: pwsh
+        run: |
+          $env:PATH = "$env:QT_ROOT_DIR\bin;$env:PATH"
+          ctest --test-dir build --output-on-failure
+
+      - name: Stage portable bundle
+        shell: pwsh
+        run: |
+          $version = '${{ steps.version.outputs.version }}'
+          $name = 'RBMK-Control-Room'
+          $portable = Join-Path $PWD "portable/$name-$version"
+          New-Item -ItemType Directory -Path $portable -Force | Out-Null
+          Copy-Item "build/$name.exe" $portable
+          Copy-Item README.md, LICENSE $portable
+          $deploy = Join-Path $env:QT_ROOT_DIR 'bin/windeployqt.exe'
+          & $deploy --release --no-translations --no-system-d3d-compiler --no-opengl-sw (Join-Path $portable "$name.exe")
+          if ($LASTEXITCODE -ne 0) { throw "windeployqt failed with exit code $LASTEXITCODE" }
+          if (-not (Test-Path (Join-Path $portable 'platforms/qwindows.dll'))) { throw 'Qt Windows platform plugin was not deployed.' }
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          Compress-Archive -Path $portable -DestinationPath "dist/$name-$version-win64-portable.zip"
+
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          $redist = Join-Path $PWD 'build/vc_redist.x64.exe'
+          Invoke-WebRequest -Uri 'https://aka.ms/vs/17/release/vc_redist.x64.exe' -OutFile $redist
+          choco install innosetup --no-progress -y
+          $buildDir = Join-Path $PWD 'build'
+          $qtBin = Join-Path $env:QT_ROOT_DIR 'bin'
+          powershell -NoProfile -ExecutionPolicy Bypass -File .\installer\build-installer.ps1 `
+            -BuildDir $buildDir -QtBin $qtBin -RedistPath $redist
+          if ($LASTEXITCODE -ne 0) { throw "installer build failed with exit code $LASTEXITCODE" }
+          Copy-Item out\*.exe dist
+
+      - name: Write checksums
+        shell: pwsh
+        run: |
+          Get-ChildItem dist -File -Filter '*.exe' | ForEach-Object {
+            $hash = (Get-FileHash -Algorithm SHA256 $_.FullName).Hash.ToLower()
+            "$hash  $($_.Name)"
+          } | Set-Content dist/SHA256SUMS.txt
+          Get-Content dist/SHA256SUMS.txt
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: RBMK-Control-Room-${{ steps.version.outputs.version }}-win64
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish the rolling release
+        if: github.event_name != 'pull_request'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = '${{ steps.version.outputs.version }}'
+          $template = @'
+          Latest automated Windows build of the RBMK-1000 Control Room simulator.
+
+          * Version: `{0}`
+          * Commit: `{1}` by @{2}
+          * Workflow run: https://github.com/{3}/actions/runs/{4}
+
+          ### Download
+
+          * `RBMK-Control-Room-Setup-{0}.exe` - 64-bit Windows installer (Start menu shortcut plus the Visual C++ runtime).
+          * `RBMK-Control-Room-{0}-win64-portable.zip` - unzip anywhere and run `RBMK-Control-Room.exe`.
+
+          The binaries are unsigned, so Windows SmartScreen may ask for confirmation.
+          Verify a download against `SHA256SUMS.txt`. This is an educational model,
+          not a validated reactor-physics code or an operating procedure.
+          '@
+          $notes = $template -f $version, '${{ github.sha }}', '${{ github.actor }}', $env:GITHUB_REPOSITORY, '${{ github.run_id }}'
+          Set-Content -Path release-notes.md -Value $notes -Encoding utf8
+
+          $assets = Get-ChildItem dist -File | ForEach-Object { $_.FullName }
+          gh release view $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $env:RELEASE_TAG $assets --repo $env:GITHUB_REPOSITORY --clobber
+            gh release edit $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --notes-file release-notes.md --latest
+          } else {
+            gh release create $env:RELEASE_TAG $assets --repo $env:GITHUB_REPOSITORY `
+              --title "Latest Windows build" --notes-file release-notes.md `
+              --target ${{ github.ref_name }} --latest
+          }

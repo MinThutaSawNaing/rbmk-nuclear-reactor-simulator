@@ -17,6 +17,13 @@ OutputBaseFilename=RBMK-Control-Room-Setup-{#MyAppVersion}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+; Branding: the RBMK research logo is used for the setup executable, the wizard
+; pages that Inno Setup can skin, and the shortcuts/uninstall entry (which take
+; the icon embedded in the application executable).
+SetupIconFile=..\assets\icons\rbmk.ico
+WizardImageFile=wizard-large.bmp
+WizardSmallImageFile=wizard-small.bmp
+WizardImageStretch=no
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: unchecked
