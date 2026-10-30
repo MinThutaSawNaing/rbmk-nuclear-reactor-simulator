@@ -12,6 +12,7 @@ public:
 
     void addSample(double simSeconds, double powerMWt, double fuelTempC, double xenon);
     void clear();
+    void setPowerScale(double scale) { m_powerScale = scale; update(); }
 
     QSize sizeHint() const override { return QSize(420, 156); }
     QSize minimumSizeHint() const override { return QSize(260, 128); }
@@ -29,5 +30,6 @@ private:
     };
 
     QVector<Sample> m_samples;
+    double m_powerScale = 1.0;
     static constexpr int kMaxSamples = 480; // 0.25 s cadence -> 2 minutes
 };

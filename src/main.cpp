@@ -1,4 +1,5 @@
 #include "core/ReactorCore.h"
+#include "ui/AppIcon.h"
 #include "ui/CoreView.h"
 #include "ui/MainWindow.h"
 #include "ui/Theme.h"
@@ -11,46 +12,30 @@
 #include <QFont>
 #include <QIcon>
 #include <QMouseEvent>
-#include <QPainter>
 #include <QPixmap>
 #include <QPushButton>
 #include <QTimer>
 
 #include <cmath>
 
+#ifdef Q_OS_WIN
+#  include <windows.h>
+#  include <shobjidl_core.h> // SetCurrentProcessExplicitAppUserModelID
+#endif
+
 using namespace rbmk;
 
 namespace {
 
-QIcon makeAppIcon()
+//! Give Windows its own taskbar identity. Without this the shell groups the
+//! process under the host executable's identity, so a pinned shortcut would
+//! show the wrong icon and stop grouping windows with it.
+void registerTaskbarIdentity()
 {
-    QPixmap pixmap(64, 64);
-    pixmap.fill(Qt::transparent);
-
-    QPainter p(&pixmap);
-    p.setRenderHint(QPainter::Antialiasing);
-    p.setBrush(QColor(0x0b, 0x10, 0x1a));
-    p.setPen(QPen(QColor(0x22, 0xd3, 0xee), 2.5));
-    p.drawEllipse(QRectF(4, 4, 56, 56));
-
-    p.setBrush(Qt::NoBrush);
-    p.setPen(QPen(QColor(0x38, 0xbd, 0xf8), 1.6));
-    p.save();
-    p.translate(32, 32);
-    p.rotate(30);
-    p.drawEllipse(QRectF(-22, -9, 44, 18));
-    p.rotate(60);
-    p.drawEllipse(QRectF(-22, -9, 44, 18));
-    p.rotate(60);
-    p.drawEllipse(QRectF(-22, -9, 44, 18));
-    p.restore();
-
-    p.setPen(Qt::NoPen);
-    p.setBrush(QColor(0xf5, 0x9e, 0x0b));
-    p.drawEllipse(QPointF(32, 32), 4.5, 4.5);
-    p.end();
-
-    return QIcon(pixmap);
+#ifdef Q_OS_WIN
+    const wchar_t *id = L"MinThutaSawNaing.RBMKControlRoom.Simulator";
+    SetCurrentProcessExplicitAppUserModelID(id);
+#endif
 }
 
 } // namespace
@@ -59,8 +44,10 @@ int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
     QApplication::setApplicationName(QStringLiteral("RBMK Control Room"));
-    QApplication::setApplicationVersion(QStringLiteral("1.0.0"));
+    QApplication::setApplicationVersion(QStringLiteral("1.1.0"));
     QApplication::setOrganizationName(QStringLiteral("RBMK Simulation"));
+
+    registerTaskbarIdentity();
 
     app.setStyle(QStringLiteral("Fusion"));
     QFont font(theme::monoFamily());
@@ -68,7 +55,7 @@ int main(int argc, char *argv[])
     font.setStyleHint(QFont::TypeWriter);
     app.setFont(font);
     app.setStyleSheet(theme::styleSheet());
-    app.setWindowIcon(makeAppIcon());
+    app.setWindowIcon(appicon::windowIcon());
 
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral(
@@ -130,6 +117,17 @@ int main(int argc, char *argv[])
                            || !demo.isEmpty();
     int selftestFailures = 0;
     if (automated) {
+        if (parser.isSet(selftestOption)) {
+            MainWindow second(nullptr, ReactorModel::Rbmkp2400);
+            second.startSimulation();
+            if (second.core() == window.core()
+                || std::fabs(second.core()->telemetry().powerMWt - 7500.0) > 0.1
+                || std::fabs(second.core()->powerTarget() - 7500.0) > 0.1) {
+                qWarning("FAIL independent RBMKP-2400 unit");
+                ++selftestFailures;
+            }
+            second.close();
+        }
         int shotDelay = 1800;
         if (demo == QStringLiteral("meltdown")) {
             // Educational failure demo: pull every drive out of the core and

@@ -1,4 +1,10 @@
+<p align="center">
+  <img src="assets/icons/rbmk-logo-256.png" alt="RBMK Nuclear Reactor Simulator logo" width="180">
+</p>
+
 # RBMK Nuclear Reactor Simulator
+
+[![Build Windows app](https://github.com/MinThutaSawNaing/rbmk-nuclear-reactor-simulator/actions/workflows/build.yml/badge.svg)](https://github.com/MinThutaSawNaing/rbmk-nuclear-reactor-simulator/actions/workflows/build.yml)
 
 **An interactive educational control-room sandbox inspired by the RBMK-1000**, built
 with C++17 and Qt 6 for students, educators, and researchers exploring simplified
@@ -10,6 +16,23 @@ reactor dynamics and human–machine interaction.
 > operation, engineering design, safety analysis, or quantitative research conclusions
 > without independent verification and validation against appropriate reference data.
 
+## Download
+
+You do not need Qt, CMake, or a compiler to run the simulator. Every push to `main`
+builds the Windows x64 binaries and refreshes the
+[latest build release](https://github.com/MinThutaSawNaing/rbmk-nuclear-reactor-simulator/releases/latest):
+
+| Asset | What it is |
+| --- | --- |
+| `RBMK-Control-Room-Setup-<version>.exe` | 64-bit installer: the app, its Qt runtime, the Visual C++ runtime and a Start menu shortcut |
+| `RBMK-Control-Room-<version>-win64-portable.zip` | portable bundle: unzip anywhere and run `RBMK-Control-Room.exe` |
+| `SHA256SUMS.txt` | SHA-256 checksums for both downloads |
+
+Each run also uploads the same files as workflow artifacts on the
+[Actions](https://github.com/MinThutaSawNaing/rbmk-nuclear-reactor-simulator/actions/workflows/build.yml)
+tab. The binaries are **not code-signed**, so Windows SmartScreen may ask you to confirm
+before running them. See [`LICENSE`](LICENSE) before redistributing.
+
 ## At a glance
 
 - Explore an interactive channel map, individual control rods, eight coolant pumps, the
@@ -18,6 +41,16 @@ reactor dynamics and human–machine interaction.
 - Compare nominal, low-power, and cold-shutdown starting states.
 - Inspect and test a UI-independent physics engine alongside the Qt control room.
 - Build a 64-bit Windows installer or run directly from a local build.
+- Open independent reactor units via **File → New independent reactor unit**. Each
+  window runs its own simulation, controls, alarms, pause state, and clock; there
+  are no shared plant systems. Closing a unit ends that unit's simulation.
+- Select the **RBMKP-2400 (scaled approximation)** when opening a new unit. This
+  uses a larger illustrative 24×24 lattice with more fuel channels than the
+  RBMK-1000's 18×18 lattice. The map fits both cores to the same screen space;
+  the layout is not a verified physical design. It reuses simplified dynamics,
+  scaling power and thermal energy by 7.5. Its nominal 7,500 MWt and 2,400 MWe assume an illustrative 32% conversion
+  efficiency, not a validated design rating or turbine model. It does not model
+  the proposed design's separate sections or steam superheating.
 
 ## Screenshots
 
@@ -46,9 +79,9 @@ are no objectives, no scripted faults and no score. The reactor simply responds 
 you do to it, and instability (positive void feedback, xenon poisoning, loss of shutdown
 margin, prompt criticality, fuel damage) is an emergent consequence of those choices.
 
-Every one of the 248 core sockets is a physical channel that can be emptied or reloaded
-with a fuel bundle, a control rod drive or a water reflector column, and **all 30 control
-rod drives can be moved independently** of the bank. An automatic power controller can
+Every core socket is a physical channel that can be emptied or reloaded with a fuel
+bundle, a control rod drive or a water reflector column, and **every installed control
+rod drive can be moved independently** of the bank. An automatic power controller can
 hold any megawatt you dial in, by solving the rod-worth curve against the live core.
 
 ## Build
@@ -66,7 +99,8 @@ cmake --build build --target deploy
 
 # Ensure the Qt DLLs are available to the test executable; adjust to your Qt installation.
 $env:PATH = "C:\Qt\6.8.3\msvc2022_64\bin;$env:PATH"
-# unit tests (22 tests: kinetics, rods, xenon, cooling, cold start, meltdown, power hold)
+# unit tests (25 tests: kinetics, rods, xenon, cooling, pumps, cold start, meltdown,
+# power hold, turbine governor/trip, model scaling)
 ctest --test-dir build --output-on-failure
 ```
 
@@ -90,7 +124,7 @@ powershell -ExecutionPolicy Bypass -File .\installer\build-installer.ps1
 ```
 
 The script stages only the executable and its Qt runtime, then builds
-`out\RBMK-Control-Room-Setup-1.0.0.exe` using Inno Setup 6. It defaults to the
+`out\RBMK-Control-Room-Setup-1.1.0.exe` using Inno Setup 6. It defaults to the
 Qt 6.8.3 MSVC x64 location shown above and `build\vc_redist.x64.exe`; use
 `-QtBin`, `-RedistPath`, `-BuildDir`, or `-IsccPath` to override those paths.
 Provide the official Microsoft Visual C++ x64 Redistributable appropriate for
@@ -98,6 +132,34 @@ the compiler used to build the application. The installer requires administrator
 rights, installs the redistributable if needed, and creates a Start menu shortcut
 with an optional desktop shortcut. The resulting installer is for 64-bit Windows.
 The installer is not digitally signed.
+
+## Branding and application icon
+
+Every icon in the product comes from one master file, `logos/rbmk_research_logo_500.png`:
+
+- `assets/icons/rbmk.ico` — multi-resolution icon (16–256 px) compiled into
+  `RBMK-Control-Room.exe`, so Explorer, the taskbar, pinned/Start menu shortcuts, the
+  uninstall entry and the setup program all show the logo. The executable also carries
+  a version block (`Properties → Details`) and its own AppUserModelID so Windows groups
+  the taskbar button correctly.
+- `assets/icons/rbmk-logo-<size>.png` — embedded in the Qt resource system and loaded by
+  `src/ui/AppIcon.cpp` for the window/taskbar icon, the header badge and the About dialog,
+  picking the size that matches the display's device pixel ratio.
+- `installer/wizard-large.bmp`, `installer/wizard-small.bmp` — Inno Setup wizard artwork.
+
+Regenerate all of them after changing the master artwork (requires Pillow):
+
+```powershell
+python tools/make_icons.py
+```
+
+## Continuous integration
+
+`.github/workflows/build.yml` runs on every push to `main`, on pull requests and on
+demand. It installs Qt, builds the Release executable, runs the unit tests, produces the
+portable ZIP and the Inno Setup installer, writes `SHA256SUMS.txt`, uploads them as
+workflow artifacts, and — for non-pull-request runs — replaces the assets of the rolling
+`latest-build` release so the download links above always serve the newest green build.
 
 ## Controls
 
@@ -222,10 +284,16 @@ or impose distribution obligations independently of the project license.
 src/core/ReactorTypes.h    channels, assemblies, telemetry, log entries
 src/core/ReactorCore.h/cpp physics engine, rod drives, assembly exchange, alarms
 src/ui/Theme.h/cpp         palette and stylesheet
-src/ui/CoreView.h/cpp      painted 18x18 shield map, drag/wheel/context interaction
+src/ui/AppIcon.h/cpp       logo-backed window/taskbar icon, header badge, About image
+src/ui/CoreView.h/cpp      painted model-sized shield map, drag/wheel/context interaction
 src/ui/GaugeCard.h/cpp     telemetry read-out card
 src/ui/TrendChart.h/cpp    rolling power / fuel temperature / xenon strip chart
 src/ui/MainWindow.h/cpp    control room layout, menus, inspector, event log
-src/main.cpp               application entry, icon, --preset/--hold/--selftest/--screenshot
+src/main.cpp               application entry, taskbar identity, --preset/--hold/--selftest
+src/win/app.rc.in          executable icon and version block (configured by CMake)
+assets/icons/              generated PNG icon set and multi-resolution .ico
+installer/                 Inno Setup script, wizard artwork and staging script
+tools/make_icons.py        regenerates every icon from the master logo
+.github/workflows/build.yml CI: build, test, portable ZIP, installer, release upload
 tests/core_tests.cpp       QtTest suite for the physics engine
 ```

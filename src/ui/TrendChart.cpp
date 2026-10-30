@@ -85,7 +85,7 @@ void TrendChart::paintEvent(QPaintEvent *)
         p.setPen(theme::dim());
         p.drawText(QRectF(card.left() + 4, y - 8, 36, 16),
                    Qt::AlignRight | Qt::AlignVCenter,
-                   QString::number(3200 - i * 800));
+                   QString::number((3200 - i * 800) * m_powerScale, 'f', 0));
         p.setPen(QPen(theme::border(), 1.0, Qt::DotLine));
     }
 
@@ -122,7 +122,7 @@ void TrendChart::paintEvent(QPaintEvent *)
         p.drawPath(path);
     };
 
-    drawSeries(3200.0, theme::accent(), 1.8, [](const Sample &s) { return s.power; });
+    drawSeries(3200.0 * m_powerScale, theme::accent(), 1.8, [](const Sample &s) { return s.power; });
     drawSeries(1400.0, theme::warning(), 1.4, [](const Sample &s) { return s.fuel; });
     drawSeries(2.0, theme::purple(), 1.2, [](const Sample &s) { return s.xenon; });
 

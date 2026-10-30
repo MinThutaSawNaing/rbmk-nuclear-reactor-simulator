@@ -1,5 +1,6 @@
 #include "ui/MainWindow.h"
 
+#include "ui/AppIcon.h"
 #include "ui/CoreView.h"
 #include "ui/GaugeCard.h"
 #include "ui/Theme.h"
@@ -9,6 +10,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QClipboard>
+#include <QCloseEvent>
 #include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -103,16 +105,22 @@ double presetPower(CorePreset preset)
 } // namespace
 
 // -----------------------------------------------------------------------------
-MainWindow::MainWindow(QWidget *parent)
+MainWindow::MainWindow(QWidget *parent, ReactorModel model)
     : QMainWindow(parent)
 {
     m_core = new ReactorCore(this);
+    m_core->setModel(model);
 
-    setWindowTitle(QStringLiteral("RBMK-1000 Control Room  —  Core Physics Sandbox"));
+    static int nextUnit = 1;
+    const int unit = nextUnit++;
+    setWindowTitle(model == ReactorModel::Rbmkp2400
+                       ? QStringLiteral("Unit %1 — RBMKP-2400 scaled approximation").arg(unit)
+                       : QStringLiteral("Unit %1 — RBMK-1000 Control Room").arg(unit));
     resize(1680, 1000);
     setMinimumSize(1360, 780);
 
     buildUi();
+    m_chart->setPowerScale(m_core->powerScale());
     buildMenus();
 
     connect(m_core, &ReactorCore::stateUpdated, this, &MainWindow::refreshUi);
@@ -142,6 +150,13 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow() = default;
 
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    m_core->stop();
+    m_chartTimer->stop();
+    QMainWindow::closeEvent(event);
+}
+
 void MainWindow::startSimulation(CorePreset preset)
 {
     m_core->stop();
@@ -156,12 +171,12 @@ void MainWindow::startSimulation(CorePreset preset)
     // until they ask for one.
     {
         const QSignalBlocker blocker(m_powerTargetSpin);
-        m_powerTargetSpin->setValue(presetPower(preset));
+        m_powerTargetSpin->setValue(presetPower(preset) * m_core->powerScale());
     }
     if (preset == CorePreset::ColdShutdown)
         m_core->clearPowerTarget();
     else
-        m_core->setPowerTarget(presetPower(preset));
+        m_core->setPowerTarget(presetPower(preset) * m_core->powerScale());
 
     refreshUi();
     if (preset == CorePreset::ColdShutdown) {
@@ -170,7 +185,7 @@ void MainWindow::startSimulation(CorePreset preset)
     } else {
         setHint(QStringLiteral("Reactor at %1 MWt with AUTO HOLD engaged. Type the megawatt "
                                "you want in POWER TARGET - the bank follows automatically.")
-                    .arg(presetPower(preset), 0, 'f', 0));
+                    .arg(presetPower(preset) * m_core->powerScale(), 0, 'f', 0));
     }
 }
 
@@ -248,14 +263,27 @@ QWidget *MainWindow::buildHeader()
     layout->setContentsMargins(14, 8, 14, 8);
     layout->setSpacing(14);
 
+    // Brand badge: the same research logo used for the window, taskbar and
+    // executable icons, rasterised for this screen's device pixel ratio.
+    const int badgeSide = 38;
+    auto *badge = new QLabel;
+    badge->setObjectName(QStringLiteral("AppLogo"));
+    badge->setPixmap(appicon::logo(badgeSide, devicePixelRatioF()));
+    badge->setFixedSize(badgeSide, badgeSide);
+    badge->setToolTip(QStringLiteral("RBMK — Nuclear Reactor Simulator"));
+    layout->addWidget(badge);
+
     auto *titleBlock = new QWidget;
     auto *titleLayout = new QVBoxLayout(titleBlock);
     titleLayout->setContentsMargins(0, 0, 0, 0);
     titleLayout->setSpacing(1);
-    auto *title = new QLabel(QStringLiteral("RBMK-1000  ELENA"));
+    auto *title = new QLabel(m_core->model() == ReactorModel::Rbmkp2400
+                                 ? QStringLiteral("RBMKP-2400  APPROXIMATION")
+                                 : QStringLiteral("RBMK-1000  ELENA"));
     title->setObjectName(QStringLiteral("AppTitle"));
-    auto *subtitle = new QLabel(QStringLiteral("upper biological shield IZ-250  //  "
-                                               "every channel is insertable and removable"));
+    auto *subtitle = new QLabel(m_core->model() == ReactorModel::Rbmkp2400
+        ? QStringLiteral("larger illustrative lattice // not sectional or superheated")
+        : QStringLiteral("upper biological shield IZ-250  //  every channel is insertable and removable"));
     subtitle->setObjectName(QStringLiteral("AppSubtitle"));
     titleLayout->addWidget(title);
     titleLayout->addWidget(subtitle);
@@ -290,8 +318,8 @@ QWidget *MainWindow::buildHeader()
     auto *presetRow = new QHBoxLayout;
     presetRow->setSpacing(4);
     m_presetCombo = new QComboBox;
-    m_presetCombo->addItem(QStringLiteral("Nominal 1000 MWt"), int(CorePreset::NominalHot));
-    m_presetCombo->addItem(QStringLiteral("Low power 200 MWt"), int(CorePreset::LowPower));
+    m_presetCombo->addItem(QStringLiteral("Nominal %1 MWt").arg(1000 * m_core->powerScale()), int(CorePreset::NominalHot));
+    m_presetCombo->addItem(QStringLiteral("Low power %1 MWt").arg(200 * m_core->powerScale()), int(CorePreset::LowPower));
     m_presetCombo->addItem(QStringLiteral("Cold shutdown"), int(CorePreset::ColdShutdown));
     m_presetCombo->setMinimumWidth(150);
     auto *loadButton = new QPushButton(QStringLiteral("Load"));
@@ -312,11 +340,11 @@ QWidget *MainWindow::buildHeader()
     auto *targetRow = new QHBoxLayout;
     targetRow->setSpacing(4);
     m_powerTargetSpin = new QDoubleSpinBox;
-    m_powerTargetSpin->setRange(10.0, 1450.0);
+    m_powerTargetSpin->setRange(10.0 * m_core->powerScale(), 1450.0 * m_core->powerScale());
     m_powerTargetSpin->setDecimals(0);
     m_powerTargetSpin->setSingleStep(25.0);
     m_powerTargetSpin->setSuffix(QStringLiteral(" MWt"));
-    m_powerTargetSpin->setValue(1000.0);
+    m_powerTargetSpin->setValue(1000.0 * m_core->powerScale());
     m_powerTargetSpin->setKeyboardTracking(false);
     m_powerTargetSpin->setMinimumWidth(104);
     m_powerTargetSpin->setToolTip(QStringLiteral(
@@ -507,7 +535,7 @@ QWidget *MainWindow::buildBankCard()
     connect(m_bankSlider, &QSlider::valueChanged, this, &MainWindow::onBankSliderChanged);
     layout->addWidget(m_bankSlider);
 
-    m_bankAverage = new QLabel(QStringLiteral("30 drives  ·  avg 43.0 %  ·  ORM 12.9"));
+    m_bankAverage = new QLabel(QStringLiteral("drive bank"));
     m_bankAverage->setObjectName(QStringLiteral("Hint"));
     m_bankAverage->setWordWrap(true);
     layout->addWidget(m_bankAverage);
@@ -824,6 +852,20 @@ void MainWindow::buildMenus()
 {
     auto *fileMenu = menuBar()->addMenu(QStringLiteral("&File"));
 
+    auto *newUnit = fileMenu->addMenu(QStringLiteral("New independent reactor unit"));
+    const auto addUnit = [newUnit](const QString &name, ReactorModel model) {
+        auto *action = newUnit->addAction(name);
+        QObject::connect(action, &QAction::triggered, qApp, [model] {
+            auto *window = new MainWindow(nullptr, model);
+            window->setAttribute(Qt::WA_DeleteOnClose);
+            window->show();
+            window->startSimulation();
+        });
+    };
+    addUnit(QStringLiteral("RBMK-1000"), ReactorModel::Rbmk1000);
+    addUnit(QStringLiteral("RBMKP-2400 (scaled approximation)"), ReactorModel::Rbmkp2400);
+    fileMenu->addSeparator();
+
     auto *rebuild = fileMenu->addAction(QStringLiteral("Rebuild core / reset state"));
     rebuild->setShortcut(QKeySequence(QStringLiteral("Ctrl+R")));
     connect(rebuild, &QAction::triggered, m_core, &ReactorCore::reset);
@@ -834,8 +876,8 @@ void MainWindow::buildMenus()
         QString text;
         CorePreset preset;
     } presets[3] = {
-        { QStringLiteral("Nominal 1000 MWt"), CorePreset::NominalHot },
-        { QStringLiteral("Low power 200 MWt"), CorePreset::LowPower },
+        { QStringLiteral("Nominal %1 MWt").arg(1000 * m_core->powerScale()), CorePreset::NominalHot },
+        { QStringLiteral("Low power %1 MWt").arg(200 * m_core->powerScale()), CorePreset::LowPower },
         { QStringLiteral("Cold shutdown"), CorePreset::ColdShutdown },
     };
     for (const auto &item : presets) {
@@ -1190,7 +1232,7 @@ void MainWindow::updateInspector()
         case AssemblyType::Control:
             detail = QStringLiteral("insertion %1 %   ·   worth %2 $   ·   %3")
                          .arg(ch.rodPosition, 0, 'f', 1)
-                         .arg(ReactorCore::rodWorthDollars(ch.rodWorth, ch.rodPosition), 0, 'f', 3)
+                         .arg(m_core->rodWorthDollars(ch.rodWorth, ch.rodPosition), 0, 'f', 3)
                          .arg(ch.followBank ? QStringLiteral("follows the bank")
                                             : QStringLiteral("independent trim"));
             break;
@@ -1382,17 +1424,17 @@ void MainWindow::onLoadPreset()
     m_core->loadPreset(preset); // this releases the controller, see below
     {
         const QSignalBlocker blocker(m_powerTargetSpin);
-        m_powerTargetSpin->setValue(presetPower(preset));
+        m_powerTargetSpin->setValue(presetPower(preset) * m_core->powerScale());
     }
     if (preset == CorePreset::ColdShutdown) {
         m_core->clearPowerTarget();
         setHint(QStringLiteral("Core rebuilt: %1. AUTO HOLD is off on a cold core.")
                     .arg(presetName(preset)));
     } else {
-        m_core->setPowerTarget(presetPower(preset));
+        m_core->setPowerTarget(presetPower(preset) * m_core->powerScale());
         setHint(QStringLiteral("Core rebuilt: %1. AUTO HOLD engaged at %2 MWt.")
                     .arg(presetName(preset))
-                    .arg(presetPower(preset), 0, 'f', 0));
+                    .arg(presetPower(preset) * m_core->powerScale(), 0, 'f', 0));
     }
 }
 
@@ -1673,7 +1715,7 @@ void MainWindow::refreshUi()
 
     // --- gauges -------------------------------------------------------------
     m_powerGauge->setReading(QString::number(t.powerMWt, 'f', 0),
-                             t.powerMWt / 3200.0,
+                             t.powerMWt / (3200.0 * m_core->powerScale()),
                              theme::accent(),
                              QStringLiteral("%1 MWe").arg(t.electricMW, 0, 'f', 0));
 
@@ -1876,9 +1918,9 @@ void MainWindow::showManual()
 </style>
 <h2>RBMK-1000 ELENA — CORE PHYSICS SANDBOX</h2>
 <p>There are no missions, objectives or scripted faults. The reactor is a physical
-system: whatever happens is the consequence of what you do to it. Every one of the
-248 channels can be emptied or reloaded, and every control rod drive can be moved
-on its own.</p>
+system: whatever happens is the consequence of what you do to it. Every core
+socket can be emptied or reloaded, and every installed control rod drive can be
+moved on its own.</p>
 
 <h3>THE CORE MAP</h3>
 <ul>
@@ -1900,9 +1942,9 @@ on its own.</p>
 
 <h3>ASSEMBLIES (all insertable and removable)</h3>
 <ul>
-<li><b>Fuel bundle</b> — contributes +7 $ of excess reactivity across the as-built load
-    (180 channels). Removing fuel lowers reactivity, adding fuel raises it.</li>
-<li><b>Control rod drive</b> — 8.5 $ total worth across the as-built 30 drives, weighted
+<li><b>Fuel bundle</b> — contributes +7 $ of excess reactivity across the as-built fuel
+    load. Removing fuel lowers reactivity, adding fuel raises it.</li>
+<li><b>Control rod drive</b> — 8.5 $ total worth across the as-built drive set, weighted
     radially (centre rods are worth more). Worth follows an S-curve, so a rod at 50 %
     is worth half of its full stroke. Each drive travels at 14 %/s.</li>
 <li><b>Water reflector</b> — small positive worth (+0.008 $ per column versus as-built).</li>
@@ -2021,15 +2063,21 @@ real reactor physics code.</p>
 
 void MainWindow::showAbout()
 {
-    QMessageBox::about(this, QStringLiteral("About RBMK-1000 ELENA"),
-                       QStringLiteral("<h3>RBMK-1000 ELENA — core physics sandbox</h3>"
-                                      "<p>A Qt 6 / C++17 control-room simulator with "
-                                      "individually removable assemblies and independently "
-                                      "driven control rods.</p>"
-                                      "<p>Built with Qt %1 and a hand-written reactor physics "
-                                      "engine (point kinetics, xenon dynamics, void feedback, "
-                                      "two-node thermal hydraulics).</p>"
-                                      "<p style='color:#64748b'>Educational use only — not a "
-                                      "real plant model.</p>")
-                           .arg(QString::fromLatin1(qVersion())));
+    QMessageBox about(this);
+    about.setWindowTitle(QStringLiteral("About RBMK-1000 ELENA"));
+    about.setWindowIcon(appicon::windowIcon());
+    about.setIconPixmap(appicon::logo(96, devicePixelRatioF()));
+    about.setTextFormat(Qt::RichText);
+    about.setText(QStringLiteral("<h3>RBMK-1000 ELENA — core physics sandbox</h3>"
+                                 "<p>A Qt 6 / C++17 control-room simulator with "
+                                 "individually removable assemblies and independently "
+                                 "driven control rods.</p>"
+                                 "<p>Built with Qt %1 and a hand-written reactor physics "
+                                 "engine (point kinetics, xenon dynamics, void feedback, "
+                                 "two-node thermal hydraulics).</p>"
+                                 "<p style='color:#64748b'>Educational use only — not a "
+                                 "real plant model.</p>")
+                      .arg(QString::fromLatin1(qVersion())));
+    about.setStandardButtons(QMessageBox::Close);
+    about.exec();
 }
