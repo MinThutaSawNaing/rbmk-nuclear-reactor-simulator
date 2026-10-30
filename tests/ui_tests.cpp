@@ -77,6 +77,40 @@ private slots:
         QVERIFY(!dialog.isVisible());
     }
 
+    void turbineStatusTracksSteamAndRunUp()
+    {
+        rbmk::Telemetry unloaded;
+        unloaded.turbineValvePct = 50.0;
+        unloaded.pressureAtm = 68.0;
+        unloaded.turbineRpm = 3000.0;
+        unloaded.turbineSynced = true;
+        unloaded.turbineMW = 0.0;
+        QCOMPARE(TurbineView::stateOf(unloaded), TurbineView::State::Running);
+        unloaded.turbineSynced = false;
+        unloaded.pressureAtm = 16.0;
+        unloaded.turbineRpm = 1500.0;
+        QCOMPARE(TurbineView::stateOf(unloaded), TurbineView::State::Running);
+        for (const auto model : { rbmk::ReactorModel::Rbmk1000, rbmk::ReactorModel::Rbmkp2400 }) {
+            rbmk::ReactorCore core;
+            core.setModel(model);
+            core.initialize(rbmk::CorePreset::ColdShutdown);
+            core.stop();
+            core.resetTurbine();
+            QCOMPARE(TurbineView::stateOf(core.telemetry()), TurbineView::State::WaitingForSteam);
+            core.advance(10.0);
+            QCOMPARE(core.telemetry().turbineRpm, 0.0);
+            QCOMPARE(TurbineView::stateOf(core.telemetry()), TurbineView::State::WaitingForSteam);
+            core.loadPreset(rbmk::CorePreset::NominalHot);
+            core.stop();
+            core.tripTurbine();
+            core.advance(40.0);
+            core.setTurbineValve(50.0);
+            QCOMPARE(TurbineView::stateOf(core.telemetry()), TurbineView::State::RollingUp);
+            core.advance(30.0);
+            QCOMPARE(TurbineView::stateOf(core.telemetry()), TurbineView::State::OnGrid);
+        }
+    }
+
     void turbineAnimationFollowsPlant()
     {
         rbmk::ReactorCore core;
@@ -96,6 +130,14 @@ private slots:
         QVERIFY(hot.save(QStringLiteral("turbine-preview.png")));
         QTest::qWait(180);
         QVERIFY(view.grab().toImage() != hot);
+        // Inspect only the blade region: moving steam dashes must not mask a
+        // frozen rotor. Check accelerated simulation at the smaller card size.
+        view.resize(340, 168);
+        core.setTimeScale(20.0);
+        const QRect blades(50, 61, 145, 28);
+        const auto rotor = view.grab().toImage().copy(blades);
+        QTest::qWait(180);
+        QVERIFY(view.grab().toImage().copy(blades) != rotor);
         core.setPaused(true);
         const auto paused = view.grab().toImage();
         QTest::qWait(180);

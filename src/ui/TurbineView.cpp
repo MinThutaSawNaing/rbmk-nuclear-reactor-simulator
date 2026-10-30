@@ -46,7 +46,9 @@ TurbineView::TurbineView(rbmk::ReactorCore *core, QWidget *parent)
         const auto &t = m_core->telemetry();
         const double spin = qBound(0.0, t.turbineRpm / kRatedRpm, 1.1);
         // No idle motion: a cold shaft is still. All stages use one rotor phase.
-        const double elapsed = dt * m_core->timeScale();
+        // Bound visual speed independently of accelerated physics so identical
+        // blades do not alias into an apparently stationary rotor at high speed.
+        const double elapsed = dt * qMin(m_core->timeScale(), 2.0);
         m_phase = std::fmod(m_phase + elapsed * spin * 4.0, 2.0 * M_PI);
         const double steam = !t.turbineTripped && t.pressureAtm > 12.0
             ? t.turbineValvePct / 100.0 : 0.0;
@@ -64,6 +66,10 @@ TurbineView::State TurbineView::stateOf(const rbmk::Telemetry &t)
         return State::OnGrid;
     if (t.turbineValvePct < 1.0)
         return State::GovernorShut;
+    if (t.pressureAtm <= 12.0)
+        return State::WaitingForSteam;
+    if (t.turbineSynced || t.pressureAtm < 20.0 || t.turbineValvePct < 10.0)
+        return State::Running;
     return State::RollingUp;
 }
 
@@ -73,6 +79,8 @@ QString TurbineView::stateLabel(State state)
     case State::Tripped:      return QStringLiteral("TRIPPED");
     case State::OnGrid:       return QStringLiteral("ON GRID");
     case State::GovernorShut: return QStringLiteral("GOVERNOR SHUT");
+    case State::WaitingForSteam: return QStringLiteral("WAITING FOR STEAM");
+    case State::Running:      return QStringLiteral("RUNNING / OFF GRID");
     case State::RollingUp:    return QStringLiteral("ROLLING UP");
     }
     return QString();
@@ -203,7 +211,10 @@ void TurbineView::paintStage(QPainter &p, double x, double radius, double spin) 
         blade << project(a, radius * 0.25) << project(a + 0.08, radius)
               << project(a + 0.23, radius) << project(a + 0.20, radius * 0.25);
         const int light = int(112 + 65 * std::sin(a));
-        p.setBrush(QColor(light, light + 10, qMin(255, light + 24)));
+        // A single contrasting blade provides an unambiguous rotation cue,
+        // rather than an almost invariant ring of identical silver blades.
+        p.setBrush(i == 0 ? theme::accent()
+                         : QColor(light, light + 10, qMin(255, light + 24)));
         p.setPen(QPen(theme::border(), 0.45));
         p.drawPolygon(blade);
     }

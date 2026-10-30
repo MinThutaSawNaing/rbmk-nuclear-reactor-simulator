@@ -68,6 +68,10 @@ automated screenshot/self-test/demo runs skip the launcher.
 The turbine panel shows an illustrative HP/LP multi-stage cutaway, a common
 shaft, bearings, and a stationary generator casing. Rotation is visually slowed
 for readability, stops at zero RPM, freezes on pause, and follows coast-down.
+Visual acceleration is capped at 2x so the blades remain readable at 20x
+simulation speed. With sufficient steam, governor openings of 10% or more
+can reach rated shaft speed; admission still controls electrical load.
+An open governor without steam displays **WAITING FOR STEAM**, not roll-up.
 It is a painted depth projection, not a CAD or engineering visualization.
 
 **Does the turbine affect the reactor?** In this simulator, reactor power and

@@ -1237,7 +1237,12 @@ void ReactorCore::updateTurbine(double dt)
     // Enough steam to hold the machine at speed (rated pressure is ~68 atm).
     const double steamGate = clampd((m_pressure - 12.0) / 45.0, 0.0, 1.0);
 
-    double rpmTarget = kTurbineRatedRpm * valveFrac * steamGate;
+    // Governor admission controls load, not a fixed fraction of synchronous
+    // speed. With adequate steam even a partly open valve can roll the unloaded
+    // shaft to rated speed; very small openings still give a slow run-up.
+    const double speedSteam = clampd((m_pressure - 12.0) / 8.0, 0.0, 1.0);
+    const double speedAdmission = clampd(valveFrac / 0.10, 0.0, 1.0);
+    double rpmTarget = kTurbineRatedRpm * speedAdmission * speedSteam;
     if (m_turbineTripped)
         rpmTarget = 0.0;
 

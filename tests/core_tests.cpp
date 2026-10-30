@@ -22,6 +22,7 @@ private slots:
     void pumpTripHeatsTheCore();
     void eightPumpTrainCarriesFullFlow();
     void turbineFollowsGovernorAndTrips();
+    void turbineReachesRatedSpeedAtPartLoad();
     void turbineDoesNotFeedBackIntoReactor();
     void xenonBuildsAfterShutdown();
     void swappingAssembliesChangesInventory();
@@ -287,6 +288,30 @@ void CorePhysicsTest::turbineDoesNotFeedBackIntoReactor()
         QCOMPARE(tripped.telemetry().reactivityDollars, exporting.telemetry().reactivityDollars);
         QCOMPARE(tripped.telemetry().turbineMW, 0.0);
         QVERIFY(exporting.telemetry().turbineMW > 1.0);
+    }
+}
+
+void CorePhysicsTest::turbineReachesRatedSpeedAtPartLoad()
+{
+    for (const auto model : { ReactorModel::Rbmk1000, ReactorModel::Rbmkp2400 }) {
+        for (const auto preset : { CorePreset::NominalHot, CorePreset::LowPower }) {
+            for (const double valve : { 25.0, 50.0, 100.0 }) {
+                ReactorCore core;
+                core.setModel(model);
+                core.initialize(preset);
+                core.stop();
+                core.tripTurbine();
+                core.advance(40.0);
+                QVERIFY(core.telemetry().turbineRpm < 200.0);
+                core.setTurbineValve(valve);
+                core.advance(30.0);
+                QVERIFY2(core.telemetry().turbineSynced,
+                         qPrintable(QStringLiteral("valve %1: %2 rpm, %3 atm")
+                             .arg(valve).arg(core.telemetry().turbineRpm)
+                             .arg(core.telemetry().pressureAtm)));
+                QVERIFY(core.telemetry().turbineMW > 1.0);
+            }
+        }
     }
 }
 

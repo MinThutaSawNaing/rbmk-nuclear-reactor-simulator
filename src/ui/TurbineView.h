@@ -22,7 +22,7 @@ class TurbineView : public QWidget
 public:
     //! Operator-facing state of the machine. The painted lamp and the card text
     //! both come from here, so the two can never disagree about the train.
-    enum class State { Tripped, OnGrid, GovernorShut, RollingUp };
+    enum class State { Tripped, OnGrid, GovernorShut, WaitingForSteam, Running, RollingUp };
 
     explicit TurbineView(rbmk::ReactorCore *core, QWidget *parent = nullptr);
 
