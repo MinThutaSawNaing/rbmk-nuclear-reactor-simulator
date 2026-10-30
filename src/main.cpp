@@ -3,10 +3,12 @@
 #include "ui/CoreView.h"
 #include "ui/MainWindow.h"
 #include "ui/Theme.h"
+#include "ui/StartupDialog.h"
 
 #include <QApplication>
 #include <QCommandLineOption>
 #include <QCommandLineParser>
+#include <QComboBox>
 #include <QDebug>
 #include <QDoubleSpinBox>
 #include <QFont>
@@ -80,6 +82,10 @@ int main(int argc, char *argv[])
         QStringLiteral("Run a demonstration scenario instead of a plain session. "
                        "Supported: meltdown (pull every rod out)."),
         QStringLiteral("name"));
+    QCommandLineOption reactorOption(
+        QStringLiteral("reactor"),
+        QStringLiteral("Reactor model: 1000 or 2400. Skips the startup dialog."),
+        QStringLiteral("model"), QStringLiteral("1000"));
     QCommandLineOption holdOption(
         QStringLiteral("hold"),
         QStringLiteral("Start with the automatic power hold engaged at <mwt> megawatts "
@@ -90,6 +96,7 @@ int main(int argc, char *argv[])
     parser.addOption(presetOption);
     parser.addOption(demoOption);
     parser.addOption(holdOption);
+    parser.addOption(reactorOption);
     parser.process(app);
 
     CorePreset preset = CorePreset::NominalHot;
@@ -100,8 +107,25 @@ int main(int argc, char *argv[])
         preset = CorePreset::ColdShutdown;
 
     const QString demo = parser.value(demoOption).toLower();
+    const bool automated = parser.isSet(selftestOption) || parser.isSet(screenshotOption)
+                           || !demo.isEmpty();
+    const QString reactorArg = parser.value(reactorOption);
+    if (reactorArg != QStringLiteral("1000") && reactorArg != QStringLiteral("2400")) {
+        qCritical("Invalid --reactor: choose 1000 or 2400.");
+        return 2;
+    }
+    ReactorModel model = reactorArg == QStringLiteral("2400")
+        ? ReactorModel::Rbmkp2400 : ReactorModel::Rbmk1000;
+    if (!automated && !parser.isSet(reactorOption) && !parser.isSet(presetOption)
+        && !parser.isSet(holdOption)) {
+        StartupDialog startup;
+        if (startup.exec() != QDialog::Accepted)
+            return 0;
+        model = startup.model();
+        preset = startup.preset();
+    }
 
-    MainWindow window;
+    MainWindow window(nullptr, model);
     window.show();
     window.startSimulation(preset);
 
@@ -113,11 +137,29 @@ int main(int argc, char *argv[])
     }
     const bool holdRequested = parser.isSet(holdOption);
 
-    const bool automated = parser.isSet(selftestOption) || parser.isSet(screenshotOption)
-                           || !demo.isEmpty();
     int selftestFailures = 0;
     if (automated) {
         if (parser.isSet(selftestOption)) {
+            StartupDialog startup;
+            auto *reactor = startup.findChild<QComboBox *>(QStringLiteral("StartupReactor"));
+            auto *state = startup.findChild<QComboBox *>(QStringLiteral("StartupState"));
+            if (!reactor || !state || startup.model() != ReactorModel::Rbmk1000
+                || startup.preset() != CorePreset::NominalHot) {
+                qWarning("FAIL startup defaults");
+                ++selftestFailures;
+            } else {
+                reactor->setCurrentIndex(1);
+                state->setCurrentIndex(1);
+                ReactorCore selected;
+                selected.setModel(startup.model());
+                selected.initialize(startup.preset());
+                selected.stop();
+                if (selected.gridSize() != 24 || selected.preset() != CorePreset::ColdShutdown
+                    || selected.telemetry().turbineRpm != 0.0) {
+                    qWarning("FAIL startup large/cold selection");
+                    ++selftestFailures;
+                }
+            }
             MainWindow second(nullptr, ReactorModel::Rbmkp2400);
             second.startSimulation();
             if (second.core() == window.core()

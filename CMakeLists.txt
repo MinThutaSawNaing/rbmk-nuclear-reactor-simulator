@@ -29,6 +29,7 @@ qt_add_executable(RbmkControlRoom WIN32
     src/ui/GaugeCard.cpp
     src/ui/TrendChart.cpp
     src/ui/TurbineView.cpp
+    src/ui/StartupDialog.cpp
     src/ui/Theme.cpp
 )
 target_link_libraries(RbmkControlRoom PRIVATE rbmk_core Qt6::Widgets Qt6::Gui)
@@ -81,4 +82,19 @@ if(TARGET Qt6::Test)
     qt_add_executable(rbmk_tests tests/core_tests.cpp)
     target_link_libraries(rbmk_tests PRIVATE rbmk_core Qt6::Test)
     add_test(NAME core_physics COMMAND rbmk_tests)
+    qt_add_executable(rbmk_ui_tests
+        tests/ui_tests.cpp
+        src/ui/StartupDialog.cpp
+        src/ui/TurbineView.cpp
+        src/ui/CoreView.cpp
+        src/ui/Theme.cpp
+        src/ui/AppIcon.cpp
+    )
+    target_link_libraries(rbmk_ui_tests PRIVATE rbmk_core Qt6::Test Qt6::Widgets Qt6::Gui)
+    qt_add_resources(rbmk_ui_tests "test_app_icons"
+        PREFIX "/icons"
+        BASE "assets/icons"
+        FILES ${RBMK_ICON_PNGS}
+    )
+    add_test(NAME ui_controls COMMAND rbmk_ui_tests -platform offscreen)
 endif()

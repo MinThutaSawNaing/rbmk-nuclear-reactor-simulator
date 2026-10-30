@@ -3,6 +3,7 @@
 #include "core/ReactorTypes.h"
 
 #include <QWidget>
+#include <QElapsedTimer>
 
 class QTimer;
 
@@ -10,16 +11,10 @@ namespace rbmk {
 class ReactorCore;
 }
 
-/*! Animated 3-D view of the TG-1 turbo-generator train.
- *
- *  The rotor is drawn as an inclined bladed disc with real depth ordering: the
- *  blades on the far side of the wheel are painted first, then the drum, then
- *  the blades on the near side, with a foreshortened axis, a cylinder wall, a
- *  stator casing and a generator barrel behind it. Blade phase, steam admission
- *  dashes and the coupling glow are all driven by ReactorCore telemetry, so the
- *  machine spins up, coasts down and trips with the plant.
- *
- *  This is a painted pseudo-3-D projection (no Qt3D / OpenGL dependency).
+/*! Multi-stage turbine cutaway with a common shaft and shaded generator.
+ *  Painted depth projection, not a CAD model. Rotation is visually slowed to
+ *  avoid sampling a 3000 rpm rotor at display frame rates; speed, steam and
+ *  coast-down follow telemetry, and animation stops while simulation is paused.
  */
 class TurbineView : public QWidget
 {
@@ -41,12 +36,12 @@ protected:
     void paintEvent(QPaintEvent *event) override;
 
 private:
-    void paintWheel(QPainter &p, const QPointF &centre, double radius) const;
+    void paintStage(QPainter &p, double x, double radius, double spin) const;
     void paintGenerator(QPainter &p, double left, double top, double right, double bottom) const;
 
     rbmk::ReactorCore *m_core = nullptr;
     QTimer *m_timer = nullptr;
     double m_phase = 0.0;        //!< rotor angle, radians
     double m_steamPhase = 0.0;   //!< dash offset of the steam pulses
-    qint64 m_lastMs = 0;
+    QElapsedTimer m_clock;
 };

@@ -290,6 +290,8 @@ void CoreView::paintEvent(QPaintEvent *)
     p.translate(-kLayoutCentre, -kLayoutCentre);
 
     drawShield(p);
+    // Reference rings belong to the shield, behind every channel and selection.
+    drawCoreMarker(p);
 
     if (m_core) {
         for (int i = 0; i < m_core->channelCount(); ++i) {
@@ -298,10 +300,6 @@ void CoreView::paintEvent(QPaintEvent *)
                 drawChannel(p, ch);
         }
     }
-
-    // The centre marker is painted over the lattice, not under it: drawn in the
-    // shield pass it showed up as stray dashes between the sockets.
-    drawCoreMarker(p);
 
     p.restore();
 
@@ -350,11 +348,8 @@ void CoreView::drawShield(QPainter &p) const
  * The central reactivity marker: a dashed cyan ring around the core centre and
  * a red ring on the central socket cluster, plus a crosshair.
  *
- * Both radii are whole multiples of the lattice pitch (500 / gridSize layout
- * units), so the rings run exactly down the gaps between sockets instead of
- * slicing through them: the marker reads as perfectly concentric, on the
- * RBMK-1000 lattice and on the enlarged RBMKP-2400 approximation alike. It is
- * drawn after the lattice, so no socket can occlude it.
+ * Both rings share the shield's exact centre on either lattice. They are
+ * background references: channel faces and selection outlines occlude them.
  */
 void CoreView::drawCoreMarker(QPainter &p) const
 {

@@ -22,6 +22,7 @@ private slots:
     void pumpTripHeatsTheCore();
     void eightPumpTrainCarriesFullFlow();
     void turbineFollowsGovernorAndTrips();
+    void turbineDoesNotFeedBackIntoReactor();
     void xenonBuildsAfterShutdown();
     void swappingAssembliesChangesInventory();
     void removingEveryRodDestroysTheCore();
@@ -265,6 +266,28 @@ void CorePhysicsTest::eightPumpTrainCarriesFullFlow()
              qPrintable(QStringLiteral("flow %1").arg(core.telemetry().flowPct)));
     QVERIFY(!core.telemetry().pumps.at(7));
     QVERIFY(core.telemetry().pumps.at(0));
+}
+
+void CorePhysicsTest::turbineDoesNotFeedBackIntoReactor()
+{
+    // Document the deliberately one-way steam train coupling on both models.
+    for (const auto model : { ReactorModel::Rbmk1000, ReactorModel::Rbmkp2400 }) {
+        ReactorCore exporting;
+        ReactorCore tripped;
+        exporting.setModel(model);
+        tripped.setModel(model);
+        boot(exporting);
+        boot(tripped);
+        tripped.tripTurbine();
+        exporting.advance(30.0);
+        tripped.advance(30.0);
+        QCOMPARE(tripped.telemetry().powerMWt, exporting.telemetry().powerMWt);
+        QCOMPARE(tripped.telemetry().pressureAtm, exporting.telemetry().pressureAtm);
+        QCOMPARE(tripped.telemetry().coolantTempC, exporting.telemetry().coolantTempC);
+        QCOMPARE(tripped.telemetry().reactivityDollars, exporting.telemetry().reactivityDollars);
+        QCOMPARE(tripped.telemetry().turbineMW, 0.0);
+        QVERIFY(exporting.telemetry().turbineMW > 1.0);
+    }
 }
 
 void CorePhysicsTest::turbineFollowsGovernorAndTrips()

@@ -54,6 +54,28 @@ before running them. See [`LICENSE`](LICENSE) before redistributing.
   RBMK-1000. It does not model the proposed design's separate sections or steam
   superheating.
 
+## Starting a session
+
+On normal launch, choose **RBMK-1000** or **RBMKP-2400**, then **Hot** or
+**Cold**, and select **Start simulation**. Cancel closes the launcher without
+starting a reactor. The large model remains the existing scaled approximation
+(7,500 MWt / 2,400 MWe), not a 2,400 MWt thermal rating.
+
+For scripted launches, use `--reactor 1000` or `--reactor 2400` with
+`--preset nominal` or `--preset cold`. Explicit reactor/preset/hold options and
+automated screenshot/self-test/demo runs skip the launcher.
+
+The turbine panel shows an illustrative HP/LP multi-stage cutaway, a common
+shaft, bearings, and a stationary generator casing. Rotation is visually slowed
+for readability, stops at zero RPM, freezes on pause, and follows coast-down.
+It is a painted depth projection, not a CAD or engineering visualization.
+
+**Does the turbine affect the reactor?** In this simulator, reactor power and
+steam pressure drive turbine speed and electrical export; governor closure or
+a turbine trip reduces export but does not feed back into reactor pressure,
+temperature, or reactivity. Reactor SCRAM trips the turbine. Turbine load rejection
+and back-pressure feedback are not modeled.
+
 ## Screenshots
 
 ### Control room — nominal starting state
@@ -101,7 +123,7 @@ cmake --build build --target deploy
 
 # Ensure the Qt DLLs are available to the test executable; adjust to your Qt installation.
 $env:PATH = "C:\Qt\6.8.3\msvc2022_64\bin;$env:PATH"
-# unit tests (25 tests: kinetics, rods, xenon, cooling, pumps, cold start, meltdown,
+# unit tests (physics plus startup choices, turbine animation, pause and core rendering:
 # power hold, turbine governor/trip, model scaling)
 ctest --test-dir build --output-on-failure
 ```

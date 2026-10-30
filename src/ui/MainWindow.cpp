@@ -666,13 +666,16 @@ QWidget *MainWindow::buildPumpCard()
 }
 
 /*!
- * Turbine supervision: governor valve, trip / roll-up and the animated 3-D view.
+ * Turbine supervision: governor valve, trip / roll-up and the animated cutaway.
  * The machine follows the plant (steam pressure and reactor power) through
  * ReactorCore, so these controls are a governor and a trip, not an override.
  */
 QWidget *MainWindow::buildTurbineCard()
 {
     auto *group = new QGroupBox(QStringLiteral("TURBINE GENERATOR  —  TG-1"));
+    group->setToolTip(QStringLiteral("Simplified steam train: reactor power and pressure drive "
+                                    "the turbine. Governor and trip change electrical export; "
+                                    "turbine back-pressure feedback is not simulated."));
     auto *layout = new QVBoxLayout(group);
     layout->setSpacing(5);
 
