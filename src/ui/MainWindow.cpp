@@ -280,7 +280,7 @@ QWidget *MainWindow::buildHeader()
                                  : QStringLiteral("RBMK-1000  ELENA"));
     title->setObjectName(QStringLiteral("AppTitle"));
     auto *subtitle = new QLabel(m_core->model() == ReactorModel::Rbmkp2400
-        ? QStringLiteral("scaled RBMK-1000 model // not sectional or superheated")
+        ? QStringLiteral("larger illustrative lattice // not sectional or superheated")
         : QStringLiteral("upper biological shield IZ-250  //  every channel is insertable and removable"));
     subtitle->setObjectName(QStringLiteral("AppSubtitle"));
     titleLayout->addWidget(title);
@@ -1162,7 +1162,7 @@ void MainWindow::updateInspector()
         case AssemblyType::Control:
             detail = QStringLiteral("insertion %1 %   ·   worth %2 $   ·   %3")
                          .arg(ch.rodPosition, 0, 'f', 1)
-                         .arg(ReactorCore::rodWorthDollars(ch.rodWorth, ch.rodPosition), 0, 'f', 3)
+                         .arg(m_core->rodWorthDollars(ch.rodWorth, ch.rodPosition), 0, 'f', 3)
                          .arg(ch.followBank ? QStringLiteral("follows the bank")
                                             : QStringLiteral("independent trim"));
             break;

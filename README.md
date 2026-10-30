@@ -44,8 +44,10 @@ before running them. See [`LICENSE`](LICENSE) before redistributing.
   window runs its own simulation, controls, alarms, pause state, and clock; there
   are no shared plant systems. Closing a unit ends that unit's simulation.
 - Select the **RBMKP-2400 (scaled approximation)** when opening a new unit. This
-  reuses the RBMK-1000 lattice and dynamics, scaling power and thermal energy by
-  7.5. Its nominal 7,500 MWt and 2,400 MWe assume an illustrative 32% conversion
+  uses a larger illustrative 24×24 lattice with more fuel channels than the
+  RBMK-1000's 18×18 lattice. The map fits both cores to the same screen space;
+  the layout is not a verified physical design. It reuses simplified dynamics,
+  scaling power and thermal energy by 7.5. Its nominal 7,500 MWt and 2,400 MWe assume an illustrative 32% conversion
   efficiency, not a validated design rating or turbine model. It does not model
   the proposed design's separate sections or steam superheating.
 
@@ -277,7 +279,7 @@ src/core/ReactorTypes.h    channels, assemblies, telemetry, log entries
 src/core/ReactorCore.h/cpp physics engine, rod drives, assembly exchange, alarms
 src/ui/Theme.h/cpp         palette and stylesheet
 src/ui/AppIcon.h/cpp       logo-backed window/taskbar icon, header badge, About image
-src/ui/CoreView.h/cpp      painted 18x18 shield map, drag/wheel/context interaction
+src/ui/CoreView.h/cpp      painted model-sized shield map, drag/wheel/context interaction
 src/ui/GaugeCard.h/cpp     telemetry read-out card
 src/ui/TrendChart.h/cpp    rolling power / fuel temperature / xenon strip chart
 src/ui/MainWindow.h/cpp    control room layout, menus, inspector, event log

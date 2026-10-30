@@ -12,12 +12,10 @@ namespace rbmk {
 namespace {
 
 // ---------------------------------------------------------------- grid layout
-constexpr int    kGridSize        = 18;
 constexpr double kLayoutCentre    = 300.0;
 constexpr double kLayoutRadius    = 250.0;
 constexpr double kInsideRadius    = 245.0;
-constexpr double kChannelStep     = (kLayoutRadius * 2.0) / kGridSize;
-const char      *kRowLetters      = "ABCDEFGHJKLMNOPRST"; // I and Q skipped, as on the real shield
+const char      *kRowLetters      = "ABCDEFGHJKLMNOPRSTUVWXYZ"; // I and Q skipped
 
 // ------------------------------------------------------------ neutron kinetics
 constexpr double kBeta            = 0.0065;   // delayed neutron fraction
@@ -29,15 +27,12 @@ constexpr double kPeriodCap       = 1.0e7;    // reported period when essentiall
 constexpr double kRhoExcess       = 7.0;      // dollars with the as-built fuel load, rods out
 constexpr double kRodWorthFull    = 8.5;      // dollars for the as-built 30 drives, full stroke
 constexpr double kRodWeightSum    = 21.094;   // sum of radial weights of the as-built lattice
-constexpr double kRodWorthPerW    = kRodWorthFull / kRodWeightSum;
 constexpr double kXenonWorth      = 3.0;      // dollars at equilibrium xenon
 constexpr double kTempCoeff       = -0.0022;  // dollars per degC of fuel temperature
 constexpr double kTempReference   = 300.0;    // degC
 constexpr double kVoidWorth       = 1.4;      // dollars at fully voided core
 constexpr double kBurnupWorth     = 0.35;     // dollars at end of life
 constexpr double kReflectorWorth  = 0.008;    // dollars per reflector column vs. as-built
-constexpr double kNominalFuel     = 180.0;
-constexpr double kNominalReflect  = 38.0;
 constexpr double kOrmLimit        = 10.0;     // operating reactivity margin, equivalent rods
 constexpr double kOrmDanger       = 6.0;
 
@@ -141,10 +136,12 @@ void ReactorCore::initialize(CorePreset preset)
 void ReactorCore::buildGrid()
 {
     m_channels.clear();
-    m_channels.reserve(kGridSize * kGridSize);
+    const int size = gridSize();
+    const double channelStep = (kLayoutRadius * 2.0) / size;
+    m_channels.reserve(size * size);
 
-    for (int r = 0; r < kGridSize; ++r) {
-        for (int c = 0; c < kGridSize; ++c) {
+    for (int r = 0; r < size; ++r) {
+        for (int c = 0; c < size; ++c) {
             Channel ch;
             ch.row = r;
             ch.col = c;
@@ -153,8 +150,8 @@ void ReactorCore::buildGrid()
                            .arg(QLatin1Char(kRowLetters[r]))
                            .arg(c + 1, 2, 10, QLatin1Char('0'));
 
-            ch.x = kLayoutCentre - kLayoutRadius + c * kChannelStep + kChannelStep / 2.0;
-            ch.y = kLayoutCentre - kLayoutRadius + r * kChannelStep + kChannelStep / 2.0;
+            ch.x = kLayoutCentre - kLayoutRadius + c * channelStep + channelStep / 2.0;
+            ch.y = kLayoutCentre - kLayoutRadius + r * channelStep + channelStep / 2.0;
             ch.distance = std::hypot(ch.x - kLayoutCentre, ch.y - kLayoutCentre);
             ch.inside = ch.distance <= kInsideRadius;
 
@@ -178,6 +175,17 @@ void ReactorCore::buildGrid()
             ch.localTemp = kInletTemp;
             m_channels.push_back(ch);
         }
+    }
+    if (m_model == ReactorModel::Rbmkp2400) {
+        updateInventoryCounts();
+        recalcRodWorthSum();
+        m_nominalFuelCount = m_fuelCount;
+        m_nominalReflectorCount = m_reflectorCount;
+        m_nominalRodWeightSum = m_rodWorthSum;
+    } else {
+        m_nominalFuelCount = 180.0;
+        m_nominalReflectorCount = 38.0;
+        m_nominalRodWeightSum = kRodWeightSum;
     }
 }
 
@@ -478,7 +486,7 @@ double ReactorCore::rodWorthWithBank(double bankPct) const
         if (ch.type != AssemblyType::Control)
             continue;
         const double position = ch.followBank ? bankPct : ch.rodPosition;
-        worth += ch.rodWorth * kRodWorthPerW * rodWorthCurve(position);
+        worth += ch.rodWorth * (kRodWorthFull / m_nominalRodWeightSum) * rodWorthCurve(position);
     }
     return worth;
 }
@@ -791,9 +799,9 @@ double ReactorCore::rodWorthCurve(double insertionPct)
     return 0.5 * (1.0 - std::cos(M_PI * x)); // S-curve: little worth near either end
 }
 
-double ReactorCore::rodWorthDollars(double radialWeight, double insertionPct)
+double ReactorCore::rodWorthDollars(double radialWeight, double insertionPct) const
 {
-    return radialWeight * kRodWorthPerW * rodWorthCurve(insertionPct);
+    return radialWeight * (kRodWorthFull / m_nominalRodWeightSum) * rodWorthCurve(insertionPct);
 }
 
 double ReactorCore::reactorPeriod(double reactivityDollars)
@@ -835,7 +843,7 @@ double ReactorCore::computeRodWorth() const
     for (const Channel &ch : m_channels) {
         if (ch.type != AssemblyType::Control)
             continue;
-        worth += ch.rodWorth * kRodWorthPerW * rodWorthCurve(ch.rodPosition);
+        worth += ch.rodWorth * (kRodWorthFull / m_nominalRodWeightSum) * rodWorthCurve(ch.rodPosition);
     }
     return worth;
 }
@@ -859,8 +867,8 @@ double ReactorCore::computeReactivity() const
     if (m_fuelCount == 0)
         return -99.0; // no fuel, no chain reaction
 
-    const double fuelTerm      = kRhoExcess * (static_cast<double>(m_fuelCount) / kNominalFuel);
-    const double reflectorTerm = kReflectorWorth * (static_cast<double>(m_reflectorCount) - kNominalReflect);
+    const double fuelTerm      = kRhoExcess * (static_cast<double>(m_fuelCount) / m_nominalFuelCount);
+    const double reflectorTerm = kReflectorWorth * (static_cast<double>(m_reflectorCount) - m_nominalReflectorCount);
     const double rodTerm       = -computeRodWorth();
     const double xenonTerm     = -kXenonWorth * m_xenon;
     const double tempTerm      = kTempCoeff * (m_fuelTemp - kTempReference);
@@ -959,7 +967,7 @@ void ReactorCore::step(double dt)
     }
 
     // --- thermal hydraulics ------------------------------------------------
-    const double fuelScale = std::max(0.05, static_cast<double>(m_fuelCount) / kNominalFuel);
+    const double fuelScale = std::max(0.05, static_cast<double>(m_fuelCount) / m_nominalFuelCount);
     const double flowFrac = clampd(m_flow / 100.0, 0.0, 1.0);
     const double hArea = kFuelToCoolant * fuelScale;
     const double heatToCoolant = hArea * (m_fuelTemp - m_coolantTemp);   // MW

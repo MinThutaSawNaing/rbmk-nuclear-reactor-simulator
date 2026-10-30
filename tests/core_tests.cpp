@@ -65,6 +65,12 @@ void CorePhysicsTest::scaledModelAndIndependentUnits()
     large.setModel(ReactorModel::Rbmkp2400);
     boot(standard);
     boot(large);
+    QCOMPARE(standard.gridSize(), 18);
+    QCOMPARE(large.gridSize(), 24);
+    QVERIFY(large.channelCount() > standard.channelCount());
+    QVERIFY(large.telemetry().fuelChannels > standard.telemetry().fuelChannels);
+    QVERIFY(large.telemetry().controlChannels > standard.telemetry().controlChannels);
+    QVERIFY(std::fabs(large.telemetry().reactivityDollars) < 0.12);
     QCOMPARE(large.telemetry().powerMWt, 7500.0);
     QCOMPARE(large.telemetry().electricMW, 2400.0);
     large.setPowerTarget(5250.0);
@@ -80,6 +86,8 @@ void CorePhysicsTest::scaledModelAndIndependentUnits()
     large.reset();
     QCOMPARE(large.telemetry().powerMWt, 1500.0);
     QCOMPARE(large.model(), ReactorModel::Rbmkp2400);
+    QCOMPARE(large.gridSize(), 24);
+    QVERIFY(large.telemetry().fuelChannels > standard.telemetry().fuelChannels);
 }
 
 void CorePhysicsTest::nominalCoreIsCritical()

@@ -60,6 +60,7 @@ public:
     void initialize(CorePreset preset = CorePreset::NominalHot);
     void setModel(ReactorModel model) { m_model = model; }
     ReactorModel model() const { return m_model; }
+    int gridSize() const { return m_model == ReactorModel::Rbmkp2400 ? 24 : 18; }
     double powerScale() const { return m_model == ReactorModel::Rbmkp2400 ? 7.5 : 1.0; }
 
     const QVector<Channel> &channels() const { return m_channels; }
@@ -79,7 +80,7 @@ public:
     static double rodWorthCurve(double insertionPct);
     static double reactorPeriod(double reactivityDollars);
     //! Dollar worth of a drive with this radial weight at this insertion.
-    static double rodWorthDollars(double radialWeight, double insertionPct);
+    double rodWorthDollars(double radialWeight, double insertionPct) const;
 
     //! Deterministic stepping (no timer) - used by the unit tests and by the
     //! headless self-test. Advances the physics by \a seconds.
@@ -201,6 +202,7 @@ private:
     double m_rodWorthSum = 0.0;       // sum of radial weights of installed drives
     double m_nominalFuelCount = 180.0;
     double m_nominalReflectorCount = 38.0;
+    double m_nominalRodWeightSum = 21.094;
 
     int m_alarmLevel = 0;
     QString m_lastStatus;

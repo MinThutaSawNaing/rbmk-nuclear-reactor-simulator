@@ -18,7 +18,6 @@
 namespace {
 constexpr double kLayoutSize = 600.0;
 constexpr double kLayoutCentre = 300.0;
-constexpr double kChannelStep = 500.0 / 18.0;
 
 double clampd(double v, double lo, double hi)
 {
@@ -231,7 +230,7 @@ double CoreView::fitScale() const
 
 double CoreView::socketSize() const
 {
-    return kChannelStep * 0.86;
+    return (500.0 / (m_core ? m_core->gridSize() : 18)) * 0.86;
 }
 
 QPointF CoreView::layoutToWidget(double x, double y) const
@@ -552,7 +551,7 @@ void CoreView::drawTooltip(QPainter &p, const rbmk::Channel &ch) const
         lines << QStringLiteral("drive       %1")
                      .arg(ch.followBank ? QStringLiteral("following bank") : QStringLiteral("independent"));
         lines << QStringLiteral("worth       %1 $")
-                     .arg(rbmk::ReactorCore::rodWorthDollars(ch.rodWorth, ch.rodPosition),
+                     .arg(m_core->rodWorthDollars(ch.rodWorth, ch.rodPosition),
                           0, 'f', 3);
     } else if (ch.type == rbmk::AssemblyType::Fuel) {
         lines << QStringLiteral("local temp  %1 degC").arg(ch.localTemp, 0, 'f', 0);
@@ -615,14 +614,16 @@ void CoreView::drawCoordinates(QPainter &p) const
     p.setFont(label);
     p.setPen(QColor(0x64, 0x74, 0x8b));
 
-    const char *letters = "ABCDEFGHJKLMNOPRST";
+    const char *letters = "ABCDEFGHJKLMNOPRSTUVWXYZ";
+    const int gridSize = m_core ? m_core->gridSize() : 18;
+    const double channelStep = 500.0 / gridSize;
 
     // Row letters just outside the shield on the left.
     const int labelX = static_cast<int>(cx - ringRadius) - 26;
     if (labelX >= 2) {
-        for (int row = 0; row < 18; row += 3) {
-            const double y = layoutToWidget(0.0, kLayoutCentre - 250.0 + row * kChannelStep
-                                                     + kChannelStep / 2.0).y();
+        for (int row = 0; row < gridSize; row += 3) {
+            const double y = layoutToWidget(0.0, kLayoutCentre - 250.0 + row * channelStep
+                                                     + channelStep / 2.0).y();
             p.drawText(QRectF(labelX, y - 7, 22, 14), Qt::AlignRight | Qt::AlignVCenter,
                        QString(QLatin1Char(letters[row])));
         }
@@ -631,9 +632,9 @@ void CoreView::drawCoordinates(QPainter &p) const
     // Column numbers just under the shield, if the widget has the room.
     const int labelY = static_cast<int>(cy + ringRadius) + 4;
     if (labelY + 12 < height() - 2) {
-        for (int col = 2; col < 18; col += 3) {
-            const double x = layoutToWidget(kLayoutCentre - 250.0 + col * kChannelStep
-                                                + kChannelStep / 2.0, 0.0).x();
+        for (int col = 2; col < gridSize; col += 3) {
+            const double x = layoutToWidget(kLayoutCentre - 250.0 + col * channelStep
+                                                + channelStep / 2.0, 0.0).x();
             p.drawText(QRectF(x - 12, labelY, 24, 14), Qt::AlignCenter,
                        QString::number(col + 1));
         }
