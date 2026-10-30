@@ -4,6 +4,7 @@
 #include "ui/GaugeCard.h"
 #include "ui/Theme.h"
 #include "ui/TrendChart.h"
+#include "ui/TurbineView.h"
 
 #include <QAction>
 #include <QApplication>
@@ -193,6 +194,7 @@ void MainWindow::buildUi()
     controlLayout->setSpacing(8);
     controlLayout->addWidget(buildBankCard());
     controlLayout->addWidget(buildPumpCard());
+    controlLayout->addWidget(buildTurbineCard());
     controlLayout->addWidget(buildChannelCard());
     controlLayout->addStretch(1);
 
@@ -235,7 +237,7 @@ void MainWindow::buildUi()
     dock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
     dock->setWidget(buildLogDock());
     addDockWidget(Qt::BottomDockWidgetArea, dock);
-    resizeDocks({ dock }, { 142 }, Qt::Vertical);
+    resizeDocks({ dock }, { 126 }, Qt::Vertical);
 }
 
 QWidget *MainWindow::buildHeader()
@@ -583,35 +585,35 @@ QWidget *MainWindow::buildBankCard()
     m_autoStatusLabel->setWordWrap(true);
     m_autoStatusLabel->setStyleSheet(QStringLiteral("color:#64748b;"));
     layout->addWidget(m_autoStatusLabel);
-
-    auto *hint = new QLabel(QStringLiteral("Bank moves every drive; an individual trim detaches "
-                                           "one drive until the bank moves again."));
-    hint->setObjectName(QStringLiteral("Hint"));
-    hint->setWordWrap(true);
-    layout->addWidget(hint);
+    group->setToolTip(QStringLiteral("The bank moves every drive; an individual trim detaches one "
+                                     "drive until the bank moves again."));
 
     return group;
 }
 QWidget *MainWindow::buildPumpCard()
 {
-    auto *group = new QGroupBox(QStringLiteral("MAIN CIRCULATION PUMPS  —  MCP 1-4"));
+    const int count = m_core->pumpCount();
+    auto *group = new QGroupBox(QStringLiteral("MAIN CIRCULATION PUMPS  —  MCP 1-%1").arg(count));
     auto *layout = new QVBoxLayout(group);
     layout->setSpacing(7);
 
     auto *grid = new QGridLayout;
     grid->setSpacing(5);
-    for (int i = 0; i < 4; ++i) {
-        auto *button = new QPushButton(QStringLiteral("MCP-%1\nONLINE").arg(i + 1));
+    m_pumpButtons.clear();
+    m_pumpButtons.reserve(count);
+    for (int i = 0; i < count; ++i) {
+        auto *button = new QPushButton(QStringLiteral("MCP-%1").arg(i + 1));
         button->setObjectName(QStringLiteral("PumpButton"));
         button->setCheckable(true);
         button->setChecked(true);
-        button->setMinimumHeight(38);
+        button->setMinimumHeight(26);
+        button->setToolTip(QStringLiteral("MCP-%1 main circulation pump").arg(i + 1));
         connect(button, &QPushButton::toggled, this, [this, i](bool on) {
             if (!m_updatingUi)
                 m_core->setPump(i, on);
         });
-        m_pumpButtons[i] = button;
-        grid->addWidget(button, i / 2, i % 2);
+        m_pumpButtons.append(button);
+        grid->addWidget(button, i / 8, i % 8);
     }
     layout->addLayout(grid);
 
@@ -624,16 +626,77 @@ QWidget *MainWindow::buildPumpCard()
     row->addWidget(allOff);
     layout->addLayout(row);
 
-    m_pumpStatus = new QLabel(QStringLiteral("4/4 pumps  ·  flow 100 %"));
+    m_pumpStatus = new QLabel(QStringLiteral("%1/%1 pumps  ·  flow 100 %").arg(count));
     m_pumpStatus->setObjectName(QStringLiteral("Hint"));
     m_pumpStatus->setWordWrap(true);
     layout->addWidget(m_pumpStatus);
+    group->setToolTip(QStringLiteral("Each MCP supplies %1 % of flow; losing flow raises void, "
+                                     "which adds positive reactivity on this core.")
+                          .arg(100.0 / count, 0, 'f', 1));
 
-    auto *hint = new QLabel(QStringLiteral("Each pump = 25 % flow. Losing flow raises void - "
-                                           "which adds positive reactivity here."));
-    hint->setObjectName(QStringLiteral("Hint"));
-    hint->setWordWrap(true);
-    layout->addWidget(hint);
+    return group;
+}
+
+/*!
+ * Turbine supervision: governor valve, trip / roll-up and the animated 3-D view.
+ * The machine follows the plant (steam pressure and reactor power) through
+ * ReactorCore, so these controls are a governor and a trip, not an override.
+ */
+QWidget *MainWindow::buildTurbineCard()
+{
+    auto *group = new QGroupBox(QStringLiteral("TURBINE GENERATOR  —  TG-1"));
+    auto *layout = new QVBoxLayout(group);
+    layout->setSpacing(5);
+
+    m_turbineView = new TurbineView(m_core);
+    m_turbineView->setMinimumHeight(124);
+    layout->addWidget(m_turbineView);
+
+    // Caption, slider and readout share a single line so the whole card - view,
+    // governor and trip buttons - clears the bottom of the control column on a
+    // 900 px desktop instead of being sliced by the scroll viewport.
+    auto *valveRow = new QHBoxLayout;
+    valveRow->setSpacing(7);
+    auto *valveTitle = new QLabel(QStringLiteral("GOVERNOR"));
+    valveTitle->setObjectName(QStringLiteral("Hint"));
+    valveRow->addWidget(valveTitle);
+
+    m_turbineSlider = new QSlider(Qt::Horizontal);
+    m_turbineSlider->setRange(0, 100);
+    m_turbineSlider->setValue(int(m_core->turbineValve()));
+    m_turbineSlider->setToolTip(QStringLiteral("Steam admission to the turbine. Zero takes the "
+                                               "machine off load without touching the reactor."));
+    connect(m_turbineSlider, &QSlider::valueChanged, this, [this](int value) {
+        if (!m_updatingUi)
+            m_core->setTurbineValve(value, value % 10 == 0);
+    });
+    valveRow->addWidget(m_turbineSlider, 1);
+
+    m_turbineValveLabel = new QLabel(QStringLiteral("100 %"));
+    m_turbineValveLabel->setStyleSheet(QStringLiteral("color:#67e8f9; font-weight:bold;"));
+    // Reserve the width of the widest reading so the slider never twitches.
+    m_turbineValveLabel->setMinimumWidth(
+        m_turbineValveLabel->fontMetrics().horizontalAdvance(QStringLiteral("100 %")) + 4);
+    valveRow->addWidget(m_turbineValveLabel);
+    layout->addLayout(valveRow);
+
+    auto *buttons = new QHBoxLayout;
+    m_turbineTripButton = new QPushButton(QStringLiteral("Trip turbine"));
+    m_turbineTripButton->setObjectName(QStringLiteral("DangerButton"));
+    m_turbineTripButton->setToolTip(QStringLiteral("Slam the governor shut and take the "
+                                                   "generator off the grid"));
+    connect(m_turbineTripButton, &QPushButton::clicked, m_core, &ReactorCore::tripTurbine);
+    m_turbineResetButton = new QPushButton(QStringLiteral("Reset / roll up"));
+    m_turbineResetButton->setToolTip(QStringLiteral("Acknowledge the trip, open the governor to "
+                                                    "100 % and roll the shaft back to 3000 rpm"));
+    connect(m_turbineResetButton, &QPushButton::clicked, m_core, &ReactorCore::resetTurbine);
+    buttons->addWidget(m_turbineTripButton, 1);
+    buttons->addWidget(m_turbineResetButton, 1);
+    layout->addLayout(buttons);
+
+    m_turbineValue = new QLabel(QStringLiteral("3000 rpm  ·  318 MWe  ·  ON GRID"));
+    m_turbineValue->setObjectName(QStringLiteral("Hint"));
+    layout->addWidget(m_turbineValue);
 
     return group;
 }
@@ -846,6 +909,13 @@ void MainWindow::buildMenus()
     connect(pumpsOn, &QAction::triggered, this, [this] { m_core->setAllPumps(true); });
     auto *pumpsOff = reactorMenu->addAction(QStringLiteral("Stop all pumps"));
     connect(pumpsOff, &QAction::triggered, this, [this] { m_core->setAllPumps(false); });
+
+    reactorMenu->addSeparator();
+    auto *turbineTrip = reactorMenu->addAction(QStringLiteral("Trip turbine"));
+    turbineTrip->setShortcut(QKeySequence(Qt::Key_F3));
+    connect(turbineTrip, &QAction::triggered, m_core, &ReactorCore::tripTurbine);
+    auto *turbineReset = reactorMenu->addAction(QStringLiteral("Reset turbine / roll up"));
+    connect(turbineReset, &QAction::triggered, m_core, &ReactorCore::resetTurbine);
 
     auto *channelMenu = menuBar()->addMenu(QStringLiteral("&Channel"));
     m_installFuelAction = channelMenu->addAction(QStringLiteral("Install fuel assembly"));
@@ -1629,15 +1699,15 @@ void MainWindow::refreshUi()
                                 QStringLiteral("relief 118 atm"));
 
     int runningPumps = 0;
-    for (int i = 0; i < 4; ++i)
-        runningPumps += t.pumps[i] ? 1 : 0;
+    for (int i = 0; i < t.pumpCount && i < t.pumps.size(); ++i)
+        runningPumps += t.pumps.at(i) ? 1 : 0;
     const QColor flowColor = t.flowPct < 50.0 ? theme::danger()
                                              : (t.flowPct < 90.0 ? theme::warning()
                                                                  : theme::success());
     m_flowGauge->setReading(QString::number(t.flowPct, 'f', 0),
                             t.flowPct / 100.0,
                             flowColor,
-                            QStringLiteral("%1/4 pumps").arg(runningPumps));
+                            QStringLiteral("%1/%2 pumps").arg(runningPumps).arg(t.pumpCount));
 
     const double rho = t.reactivityDollars;
     const QColor rhoColor = rho > 0.5 ? theme::danger()
@@ -1706,16 +1776,58 @@ void MainWindow::refreshUi()
                                .arg(t.orm, 0, 'f', 1));
 
     // --- pumps --------------------------------------------------------------
-    m_pumpStatus->setText(QStringLiteral("%1/4 pumps  ·  flow %2 %")
+    m_pumpStatus->setText(QStringLiteral("%1/%2 pumps  ·  flow %3 %")
                               .arg(runningPumps)
+                              .arg(t.pumpCount)
                               .arg(t.flowPct, 0, 'f', 0));
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < m_pumpButtons.size() && i < t.pumpCommand.size(); ++i) {
         const QSignalBlocker blocker(m_pumpButtons[i]);
-        m_pumpButtons[i]->setChecked(t.pumpCommand[i]);
-        m_pumpButtons[i]->setText(QStringLiteral("MCP-%1\n%2")
-                                      .arg(i + 1)
-                                      .arg(t.pumpCommand[i] ? QStringLiteral("ONLINE")
-                                                            : QStringLiteral("OFFLINE")));
+        const bool online = t.pumpCommand.at(i);
+        m_pumpButtons[i]->setChecked(online);
+        m_pumpButtons[i]->setToolTip(QStringLiteral("MCP-%1 %2").arg(i + 1)
+                                         .arg(online ? QStringLiteral("ONLINE")
+                                                     : QStringLiteral("OFFLINE")));
+    }
+
+    // --- turbine ------------------------------------------------------------
+    if (m_turbineSlider) {
+        const QSignalBlocker blocker(m_turbineSlider);
+        m_turbineSlider->setValue(int(std::lround(t.turbineValvePct)));
+    }
+    if (m_turbineValveLabel)
+        m_turbineValveLabel->setText(QStringLiteral("%1 %").arg(t.turbineValvePct, 0, 'f', 0));
+    if (m_turbineTripButton)
+        m_turbineTripButton->setEnabled(!t.turbineTripped);
+    if (m_turbineResetButton)
+        m_turbineResetButton->setEnabled(t.turbineTripped);
+    if (m_turbineValue) {
+        QString state;
+        QColor color;
+        if (t.turbineTripped) {
+            state = QStringLiteral("TRIPPED");
+            color = theme::danger();
+        } else if (t.turbineSynced && t.turbineMW > 1.0) {
+            state = QStringLiteral("ON GRID");
+            color = theme::success();
+        } else if (t.turbineValvePct < 1.0) {
+            state = QStringLiteral("GOVERNOR SHUT");
+            color = theme::warning();
+        } else {
+            state = QStringLiteral("ROLLING UP");
+            color = theme::warning();
+        }
+        // One line only: the governor percentage already has its own readout on
+        // the slider row, and a wrapped label would push the card off the column.
+        m_turbineValue->setText(QStringLiteral("%1 rpm  ·  %2 MWe  ·  %3")
+                                    .arg(t.turbineRpm, 0, 'f', 0)
+                                    .arg(t.turbineMW, 0, 'f', 0)
+                                    .arg(state));
+        m_turbineValue->setStyleSheet(QStringLiteral("color:%1;").arg(color.name()));
+        m_turbineValue->setToolTip(QStringLiteral("TG-1 shaft speed %1 rpm, %2 MWe exported, "
+                                                  "governor valve %3 %.")
+                                       .arg(t.turbineRpm, 0, 'f', 0)
+                                       .arg(t.turbineMW, 0, 'f', 0)
+                                       .arg(t.turbineValvePct, 0, 'f', 0));
     }
 
     m_pauseButton->setText(t.paused ? QStringLiteral("Resume") : QStringLiteral("Pause"));
@@ -1843,11 +1955,21 @@ requested power is <i>held</i>, not just reached.</p>
 </ul>
 
 <h3>COOLING AND VOID</h3>
-<p>Four main circulation pumps each supply 25 % flow (about a 2.5 s ramp). Flow
+<p>Eight main circulation pumps (MCP-1..8) each supply 12.5 % flow (about a 2.5 s ramp).
+A core this size needs more than a four-pump train to carry the heat load. Flow
 removes heat; losing flow raises the void fraction, which adds positive reactivity on
 this core, so a pump trip is not just a thermal event. Pressure follows coolant
 temperature and flow: a relief valve opens at 118 atm, and above 140 atm the primary
 circuit can rupture (coolant inventory lost, residual flow only).</p>
+
+<h3>TURBINE AND GENERATOR</h3>
+<p>The TG-1 turbo-generator card carries the governor valve, a trip button and a
+reset / roll-up button, with a live 3-D view of the machine. The governor sets steam
+admission, and electrical export is thermal power x net efficiency x admission x the
+fraction of synchronous speed actually reached. The shaft does not follow the governor
+instantly (run-up inertia), and below about 20 atm the machine cannot hold 3000 rpm.
+Turbine trip shuts the governor and coasts the shaft down; AZ-5 trips the turbine with
+the reactor. Closing the governor takes the export to zero without touching the core.</p>
 
 <h3>XENON</h3>
 <p>Iodine and xenon are integrated continuously. After a power reduction xenon keeps

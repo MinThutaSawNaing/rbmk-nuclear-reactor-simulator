@@ -93,8 +93,18 @@ struct Telemetry
     int totalChannels = 0;
     int rodsBelowHalf = 0;
 
-    bool pumps[4] = { true, true, true, true };
-    bool pumpCommand[4] = { true, true, true, true };
+    //! One flag per main circulation pump. A 2400 MW-class core needs more than
+    //! four MCPs, so these are sized at run time by ReactorCore::pumpCount().
+    QVector<bool> pumps;
+    QVector<bool> pumpCommand;
+    int pumpCount = 0;
+
+    // ---- steam turbine / generator train -----------------------------------
+    double turbineRpm = 3000.0;      //!< shaft speed, rated 3000 rpm
+    double turbineValvePct = 100.0;  //!< governor valve position, 0..100
+    double turbineMW = 0.0;          //!< electrical export at the generator
+    bool turbineTripped = false;     //!< trip latched, governor valve shut
+    bool turbineSynced = true;       //!< shaft on grid speed (>= 2950 rpm)
     bool scrammed = false;
     bool destroyed = false;
     bool pipeRupture = false;

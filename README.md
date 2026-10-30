@@ -12,7 +12,8 @@ reactor dynamics and human–machine interaction.
 
 ## At a glance
 
-- Explore an interactive channel map, individual control rods, coolant pumps, and scram.
+- Explore an interactive channel map, individual control rods, eight coolant pumps, the
+  turbine governor, and scram.
 - Observe simulated power, reactivity, temperature, xenon, and operating margin.
 - Compare nominal, low-power, and cold-shutdown starting states.
 - Inspect and test a UI-independent physics engine alongside the Qt control room.
@@ -166,9 +167,13 @@ Implemented in `src/core/ReactorCore.cpp` (no UI dependencies, unit tested):
 * **Iodine / xenon dynamics** with the post-shutdown xenon peak.
 * **Positive void coefficient**: losing coolant flow raises reactivity, which is the
   mechanism that makes pump trips dangerous.
-* **Two-node thermal hydraulics** (fuel + coolant) with four switchable main circulation
-  pumps, saturation-pressure-based primary pressure, a relief valve at 118 atm and a
+* **Two-node thermal hydraulics** (fuel + coolant) with eight switchable main circulation
+  pumps at 12.5 % flow each (a four-pump train cannot carry a core this size),
+  saturation-pressure-based primary pressure, a relief valve at 118 atm and a
   pipe-rupture limit above 140 atm.
+* **Turbine and generator**: governor valve, trip and roll-up, and an animated pseudo-3D
+  TG-1 view. Export follows thermal power, steam pressure and the shaft speed actually
+  reached, so a cold core or a tripped machine exports nothing.
 * **Core damage**: fuel damage accumulates above 900 degC, the core is destroyed above
   1500 degC and must be rebuilt.
 * **Per-channel read-out**: local temperature and flux are derived from radial peaking

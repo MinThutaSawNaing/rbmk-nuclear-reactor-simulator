@@ -19,6 +19,8 @@ private slots:
     void individualRodFollowsAndDetaches();
     void scramDrivesEveryRodIn();
     void pumpTripHeatsTheCore();
+    void eightPumpTrainCarriesFullFlow();
+    void turbineFollowsGovernorAndTrips();
     void xenonBuildsAfterShutdown();
     void swappingAssembliesChangesInventory();
     void removingEveryRodDestroysTheCore();
@@ -209,6 +211,65 @@ void CorePhysicsTest::pumpTripHeatsTheCore()
              qPrintable(QStringLiteral("fuel %1 -> %2")
                             .arg(t0)
                             .arg(core.telemetry().fuelTempC)));
+}
+
+void CorePhysicsTest::eightPumpTrainCarriesFullFlow()
+{
+    ReactorCore core;
+    boot(core);
+
+    QCOMPARE(core.pumpCount(), 8);
+    QCOMPARE(core.telemetry().pumpCount, 8);
+    QCOMPARE(core.telemetry().pumps.size(), 8);
+    QVERIFY(core.telemetry().flowPct > 95.0);
+
+    // Tripping a single MCP must only cost its share of the flow, not a quarter
+    core.setPump(7, false);
+    core.advance(15.0);
+    QVERIFY2(core.telemetry().flowPct < 92.0 && core.telemetry().flowPct > 80.0,
+             qPrintable(QStringLiteral("flow %1").arg(core.telemetry().flowPct)));
+    QVERIFY(!core.telemetry().pumps.at(7));
+    QVERIFY(core.telemetry().pumps.at(0));
+}
+
+void CorePhysicsTest::turbineFollowsGovernorAndTrips()
+{
+    ReactorCore core;
+    boot(core);
+
+    // Nominal hot: the machine arrives on the grid with a real export
+    QVERIFY(core.telemetry().turbineRpm > 2900.0);
+    QVERIFY(core.telemetry().turbineSynced);
+    QVERIFY(core.telemetry().turbineMW > 250.0);
+    QCOMPARE(core.telemetry().electricMW, core.telemetry().turbineMW);
+
+    // Closing the governor drops the export but leaves the reactor alone
+    const double power = core.telemetry().powerMWt;
+    core.setTurbineValve(0.0);
+    core.advance(30.0);
+    QVERIFY(core.telemetry().turbineMW < 1.0);
+    QVERIFY(core.telemetry().powerMWt > power * 0.8);
+
+    // Opening it again brings the machine back without a reset
+    core.setTurbineValve(100.0);
+    core.advance(30.0);
+    QVERIFY(core.telemetry().turbineMW > 150.0);
+
+    // A trip coasts the shaft down and locks the valve shut
+    core.tripTurbine();
+    QVERIFY(core.telemetry().turbineTripped);
+    QCOMPARE(core.telemetry().turbineValvePct, 0.0);
+    core.advance(20.0);
+    QVERIFY(core.telemetry().turbineRpm < 2500.0);
+    QVERIFY(core.telemetry().turbineMW < 1.0);
+
+    // Roll-up puts it back on the grid
+    core.resetTurbine();
+    QVERIFY(!core.telemetry().turbineTripped);
+    core.advance(40.0);
+    QVERIFY(core.telemetry().turbineRpm > 2900.0);
+    QVERIFY(core.telemetry().turbineSynced);
+    QVERIFY(core.telemetry().turbineMW > 200.0);
 }
 
 void CorePhysicsTest::xenonBuildsAfterShutdown()

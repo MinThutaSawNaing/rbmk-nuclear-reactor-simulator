@@ -300,6 +300,10 @@ void CoreView::paintEvent(QPaintEvent *)
         }
     }
 
+    // The centre marker is painted over the lattice, not under it: drawn in the
+    // shield pass it showed up as stray dashes between the sockets.
+    drawCoreMarker(p);
+
     p.restore();
 
     drawCoordinates(p);
@@ -341,15 +345,55 @@ void CoreView::drawShield(QPainter &p) const
     }
 
     // column numbers along the bottom, margin-safe is handled in drawCoordinates
+}
 
+/*!
+ * The central reactivity marker: a dashed cyan ring around the core centre and
+ * a red ring on the central socket cluster, plus a crosshair.
+ *
+ * Both radii are whole multiples of the lattice pitch (500 / 18 = 27.78 layout
+ * units), so the rings run exactly down the gaps between sockets instead of
+ * slicing through them: the marker reads as perfectly concentric. It is drawn
+ * after the lattice, so no socket can occlude it.
+ */
+void CoreView::drawCoreMarker(QPainter &p) const
+{
+    const QPointF centre(kLayoutCentre, kLayoutCentre);
+    const double pitch = kChannelStep;
+
+    p.save();
     p.setBrush(Qt::NoBrush);
-    p.setPen(QPen(theme::accent(), 1.4, Qt::DashLine));
-    p.drawEllipse(QPointF(kLayoutCentre, kLayoutCentre), 86.0, 86.0);
-    p.setPen(QPen(theme::danger(), 1.8));
-    p.drawEllipse(QPointF(kLayoutCentre, kLayoutCentre), 30.0, 30.0);
-    p.setPen(QPen(theme::border(), 0.8));
-    p.drawLine(QPointF(kLayoutCentre, kLayoutCentre - 96), QPointF(kLayoutCentre, kLayoutCentre + 96));
-    p.drawLine(QPointF(kLayoutCentre - 96, kLayoutCentre), QPointF(kLayoutCentre + 96, kLayoutCentre));
+
+    // outer ring: three pitches out, exactly between two rows of sockets
+    QColor ring = theme::accent();
+    ring.setAlphaF(0.75);
+    p.setPen(QPen(ring, 1.4, Qt::DashLine));
+    p.drawEllipse(centre, 3.0 * pitch, 3.0 * pitch);
+
+    // inner ring: one pitch out, hugging the four central sockets
+    QColor inner = theme::danger();
+    inner.setAlphaF(0.9);
+    p.setPen(QPen(inner, 1.6));
+    p.drawEllipse(centre, pitch, pitch);
+
+    // crosshair runs down the socket gaps so it is symmetric about the centre
+    QColor hair = theme::borderLight();
+    hair.setAlphaF(0.85);
+    p.setPen(QPen(hair, 0.9));
+    const double reach = 3.5 * pitch;
+    p.drawLine(QPointF(centre.x() - reach, centre.y()), QPointF(centre.x() + reach, centre.y()));
+    p.drawLine(QPointF(centre.x(), centre.y() - reach), QPointF(centre.x(), centre.y() + reach));
+
+    // exact centre pip, in the gap where the four central sockets meet
+    p.setPen(Qt::NoPen);
+    QColor halo = theme::accent();
+    halo.setAlphaF(0.35);
+    p.setBrush(halo);
+    p.drawEllipse(centre, 5.4, 5.4);
+    p.setBrush(inner);
+    p.drawEllipse(centre, 2.4, 2.4);
+
+    p.restore();
 }
 
 void CoreView::drawChannel(QPainter &p, const rbmk::Channel &ch) const

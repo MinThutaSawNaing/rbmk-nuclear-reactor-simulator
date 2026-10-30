@@ -51,7 +51,14 @@ constexpr double kInletTemp       = 270.0;    // degC
 // ------------------------------------------------------------- drive dynamics
 constexpr double kRodDriveSpeed   = 14.0;     // %/s normal rod drive
 constexpr double kScramRodSpeed   = 42.0;     // %/s AZ-5 rod drop
+constexpr int    kMainPumpCount   = 8;        // MCPs on a 2400 MW-class core
 constexpr double kTickSeconds     = 0.05;
+
+// --------------------------------------------------- turbine / generator train
+constexpr double kTurbineRatedRpm = 3000.0;   // synchronous speed
+constexpr double kTurbineEff      = 0.32;     // net thermal -> electrical
+constexpr double kTurbineSpool    = 4.0;      // s, run-up / load ramp inertia
+constexpr double kTurbineCoast    = 12.0;     // s, trip coast-down inertia
 
 // ------------------------------------------------------ power hold controller
 /*!
@@ -111,6 +118,8 @@ QString presetName(CorePreset preset)
 ReactorCore::ReactorCore(QObject *parent)
     : QObject(parent)
 {
+    m_pumpCount = kMainPumpCount;
+    m_pumpCommand = QVector<bool>(m_pumpCount, true);
     buildGrid();
     updateInventoryCounts();
     recalcRodWorthSum();
@@ -224,8 +233,15 @@ void ReactorCore::applyPreset(CorePreset preset)
     m_alarmLevel = 0;
     m_lastStatus.clear();
 
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < m_pumpCount; ++i)
         m_pumpCommand[i] = true;
+
+    // The turbine train resets with the core: hot preset arrives on the grid at
+    // rated speed, a cold core has the machine shut down and ready to roll.
+    m_turbineTripped = false;
+    m_turbineValve = (preset == CorePreset::ColdShutdown) ? 0.0 : 100.0;
+    m_turbineRpm = (preset == CorePreset::ColdShutdown) ? 0.0 : kTurbineRatedRpm;
+    m_turbineMW = 0.0;
 
     switch (preset) {
     case CorePreset::NominalHot:
@@ -279,6 +295,11 @@ void ReactorCore::applyPreset(CorePreset preset)
         ch.burnup = m_burnup;
         ch.localXenon = m_xenon;
     }
+    // The machine comes onto the bar with a hot core, so the initial export is
+    // consistent with the preset instead of reading 0 MWe until the first tick.
+    m_turbineRpm = (preset == CorePreset::ColdShutdown) ? 0.0 : kTurbineRatedRpm;
+    updateTurbine(0.0);
+
     m_reactivity = computeReactivity();
     m_period = reactorPeriod(m_reactivity);
 }
@@ -727,7 +748,7 @@ void ReactorCore::swapAssembly(int channelIndex, AssemblyType type)
 // ---------------------------------------------------------------- pumps / AZ5
 void ReactorCore::setPump(int index, bool running)
 {
-    if (index < 0 || index >= 4)
+    if (index < 0 || index >= m_pumpCount)
         return;
     if (m_pumpCommand[index] == running)
         return;
@@ -743,11 +764,63 @@ void ReactorCore::setPump(int index, bool running)
 
 void ReactorCore::setAllPumps(bool running)
 {
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < m_pumpCount; ++i)
         m_pumpCommand[i] = running;
-    emitLog(running ? QStringLiteral("All four main circulation pumps started.")
-                    : QStringLiteral("All four main circulation pumps stopped - flow coasting down."),
+    emitLog(running ? QStringLiteral("All %1 main circulation pumps started.")
+                          .arg(m_pumpCount)
+                    : QStringLiteral("All %1 main circulation pumps stopped - "
+                                     "flow coasting down.")
+                          .arg(m_pumpCount),
             running ? 3 : 1);
+    refreshTelemetry();
+    emit stateUpdated();
+}
+
+// ------------------------------------------------------------ turbine controls
+void ReactorCore::setTurbineValve(double pct, bool announce)
+{
+    const double next = clampd(pct, 0.0, 100.0);
+    if (qFuzzyCompare(next + 1.0, m_turbineValve + 1.0))
+        return;
+    m_turbineValve = next;
+    if (m_turbineValve > 0.0 && m_turbineTripped) {
+        // opening the governor after a trip is how the machine is re-armed
+        m_turbineTripped = false;
+        if (announce)
+            emitLog(QStringLiteral("Turbine trip reset - governor valve opening to %1 %.")
+                        .arg(m_turbineValve, 0, 'f', 0),
+                    3);
+    } else if (announce) {
+        emitLog(QStringLiteral("Turbine governor valve set to %1 %.")
+                    .arg(m_turbineValve, 0, 'f', 0),
+                3);
+    }
+    refreshTelemetry();
+    emit stateUpdated();
+}
+
+void ReactorCore::tripTurbine()
+{
+    if (m_turbineTripped)
+        return;
+    m_turbineTripped = true;
+    m_turbineValve = 0.0;
+    emitLog(QStringLiteral("TURBINE TRIP - governor valve shut, generator breaker open, "
+                           "shaft coasting down from %1 rpm.")
+                .arg(m_turbineRpm, 0, 'f', 0),
+            2);
+    refreshTelemetry();
+    emit stateUpdated();
+}
+
+void ReactorCore::resetTurbine()
+{
+    m_turbineTripped = false;
+    m_turbineValve = 100.0;
+    emitLog(QStringLiteral("Turbine re-armed - governor to 100 %, rolling the shaft back to "
+                           "%1 rpm.")
+                .arg(kTurbineRatedRpm, 0, 'f', 0),
+            3);
     refreshTelemetry();
     emit stateUpdated();
 }
@@ -765,6 +838,8 @@ void ReactorCore::scram()
     }
 
     emitLog(QStringLiteral("AZ-5 ACTUATED: all %1 rod drives dropping to 100 %.").arg(m_controlCount), 2);
+    // A scram takes the machine off the grid with the reactor.
+    tripTurbine();
     releaseAutoHold(QStringLiteral("AUTO HOLD released: AZ-5 overrides the power controller."), 1);
 
     // The infamous positive scram effect: with a very small operating reactivity
@@ -919,14 +994,18 @@ void ReactorCore::step(double dt)
 
     // --- coolant flow -------------------------------------------------------
     int runningPumps = 0;
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < m_pumpCount; ++i)
         runningPumps += m_pumpCommand[i] ? 1 : 0;
 
-    double flowTarget = runningPumps * 25.0;
+    const double pumpFlow = 100.0 / static_cast<double>(m_pumpCount);
+    double flowTarget = runningPumps * pumpFlow;
     if (m_pipeRupture)
         flowTarget = std::min<double>(flowTarget, 8.0);
     m_flow += (flowTarget - m_flow) * std::min(1.0, dt / 2.5);
     m_flow = clampd(m_flow, 0.0, 100.0);
+
+    // --- turbine / generator -------------------------------------------------
+    updateTurbine(dt);
 
     // --- void fraction ------------------------------------------------------
     m_void += (voidFractionTarget() - m_void) * std::min(1.0, dt / 3.0);
@@ -935,6 +1014,9 @@ void ReactorCore::step(double dt)
         m_power = 0.0;
         m_reactivity = 0.0;
         m_period = kPeriodCap;
+        // A destroyed core cannot make steam: the machine trips and coasts down.
+        m_turbineTripped = true;
+        m_turbineValve = 0.0;
         m_fuelTemp += (m_coolantTemp - m_fuelTemp) * std::min(1.0, dt / 120.0);
         m_coolantTemp += (m_inletTemp + 20.0 - m_coolantTemp) * std::min(1.0, dt / 300.0);
         m_pressure += (std::max(1.0, m_pressure * 0.995) - m_pressure) * std::min(1.0, dt / 5.0);
@@ -1129,12 +1211,45 @@ void ReactorCore::updateSpatialReadout()
     }
 }
 
+// ------------------------------------------------------------------ turbine
+/*!
+ * Game-tuned steam turbine / generator train.
+ *
+ *  - The governor holds the shaft at synchronous speed for any valve opening
+ *    above zero, but only if the primary circuit can still make steam: below
+ *    roughly 20 atm the machine cannot hold speed and starts to bog down.
+ *  - The shaft does not follow the governor instantly (k turbine spool inertia),
+ *    and a trip coasts it down over tens of seconds.
+ *  - Electrical export is thermal power x net efficiency x valve opening x the
+ *    fraction of synchronous speed actually reached.
+ */
+void ReactorCore::updateTurbine(double dt)
+{
+    const double valveFrac = clampd(m_turbineValve / 100.0, 0.0, 1.0);
+    // Enough steam to hold the machine at speed (rated pressure is ~68 atm).
+    const double steamGate = clampd((m_pressure - 12.0) / 45.0, 0.0, 1.0);
+
+    double rpmTarget = kTurbineRatedRpm * valveFrac * steamGate;
+    if (m_turbineTripped)
+        rpmTarget = 0.0;
+
+    const double inertia = m_turbineTripped ? kTurbineCoast : kTurbineSpool;
+    m_turbineRpm += (rpmTarget - m_turbineRpm) * std::min(1.0, dt / inertia);
+    m_turbineRpm = clampd(m_turbineRpm, 0.0, 3300.0);
+
+    const double spin = clampd(m_turbineRpm / kTurbineRatedRpm, 0.0, 1.0);
+    const double steam = clampd(m_power / 1000.0, 0.0, 4.5) * steamGate;
+    m_turbineMW = steam * kTurbineEff * 1000.0 * valveFrac * spin;
+    if (m_turbineTripped)
+        m_turbineMW = 0.0;
+}
+
 // ------------------------------------------------------------------ telemetry
 void ReactorCore::refreshTelemetry()
 {
     Telemetry &t = m_telemetry;
     t.powerMWt = m_power;
-    t.electricMW = m_power * 0.32; // typical RBMK net efficiency
+    t.electricMW = m_turbineMW; // export follows the turbine, not the core
     t.fuelTempC = m_fuelTemp;
     t.coolantTempC = m_coolantTemp;
     t.pressureAtm = m_pressure;
@@ -1173,10 +1288,15 @@ void ReactorCore::refreshTelemetry()
     t.emptyChannels = m_emptyCount;
     t.totalChannels = m_fuelCount + m_controlCount + m_reflectorCount + m_emptyCount;
 
-    for (int i = 0; i < 4; ++i) {
-        t.pumpCommand[i] = m_pumpCommand[i];
-        t.pumps[i] = m_pumpCommand[i];
-    }
+    t.pumpCount = m_pumpCount;
+    t.pumps = m_pumpCommand;
+    t.pumpCommand = m_pumpCommand;
+
+    t.turbineRpm = m_turbineRpm;
+    t.turbineValvePct = m_turbineValve;
+    t.turbineMW = m_turbineMW;
+    t.turbineTripped = m_turbineTripped;
+    t.turbineSynced = !m_turbineTripped && m_turbineRpm >= 2950.0;
     t.scrammed = m_scrammed;
     t.destroyed = m_destroyed;
     t.pipeRupture = m_pipeRupture;

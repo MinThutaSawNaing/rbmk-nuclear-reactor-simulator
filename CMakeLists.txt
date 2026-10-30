@@ -27,6 +27,7 @@ qt_add_executable(RbmkControlRoom WIN32
     src/ui/CoreView.cpp
     src/ui/GaugeCard.cpp
     src/ui/TrendChart.cpp
+    src/ui/TurbineView.cpp
     src/ui/Theme.cpp
 )
 target_link_libraries(RbmkControlRoom PRIVATE rbmk_core Qt6::Widgets Qt6::Gui)

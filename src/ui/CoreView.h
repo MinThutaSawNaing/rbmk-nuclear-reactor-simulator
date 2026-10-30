@@ -81,6 +81,7 @@ private:
     QPointF widgetToLayout(const QPointF &pos) const;
     int hitTest(const QPointF &widgetPos) const;
     void drawShield(QPainter &p) const;
+    void drawCoreMarker(QPainter &p) const;
     void drawCoordinates(QPainter &p) const;
     void drawChannel(QPainter &p, const rbmk::Channel &ch) const;
     void drawHud(QPainter &p) const;

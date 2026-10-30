@@ -45,7 +45,8 @@ enum class AutoHoldState {
  *    prompt criticality bypasses it (reactor period = Lambda / (rho - 1)).
  *  - Iodine / xenon dynamics with a post-shutdown xenon peak.
  *  - Positive void coefficient: losing flow raises reactivity.
- *  - Two-node thermal hydraulics (fuel + coolant) with four switchable pumps.
+ *  - Two-node thermal hydraulics (fuel + coolant) with eight switchable MCPs
+ *    and a governed steam turbine driving the generator.
  *  - Core damage accumulates above 900 degC; above 1500 degC the core fails.
  */
 class ReactorCore : public QObject
@@ -64,6 +65,12 @@ public:
 
     const Telemetry &telemetry() const { return m_telemetry; }
     Telemetry &mutableTelemetry() { return m_telemetry; } // tests only
+
+    //! Number of main circulation pumps on this core (eight for a 2400 MW-class
+    //! machine - a four-pump train cannot carry that heat load).
+    int pumpCount() const { return m_pumpCount; }
+    double turbineValve() const { return m_turbineValve; }
+    bool turbineTripped() const { return m_turbineTripped; }
 
     CorePreset preset() const { return m_preset; }
     double bankTarget() const { return m_bankTarget; }
@@ -106,6 +113,13 @@ public slots:
 
     void setPump(int index, bool running);
     void setAllPumps(bool running);
+
+    //! Governor valve of the turbine train (0 = shut, 100 = full admission).
+    void setTurbineValve(double pct, bool announce = true);
+    //! Trip the turbine: the governor valve slams shut and the shaft coasts down.
+    void tripTurbine();
+    //! Acknowledge the trip, re-open the governor and roll the shaft back up.
+    void resetTurbine();
     void scram();
 
     // ---- automatic power hold ------------------------------------------------
@@ -133,6 +147,7 @@ private:
     void buildGrid();
     void applyPreset(CorePreset preset);
     void step(double dt);
+    void updateTurbine(double dt);
     void updateSpatialReadout();
     void evaluateAlarm();
     void updateInventoryCounts();
@@ -186,7 +201,16 @@ private:
     bool m_destroyed = false;
     bool m_pipeRupture = false;
     bool m_reliefOpen = false;
-    bool m_pumpCommand[4] = { true, true, true, true };
+
+    //! MCP train. Each running pump contributes 100 / m_pumpCount % of flow.
+    int m_pumpCount = 8;
+    QVector<bool> m_pumpCommand;
+
+    //! Steam turbine / generator train.
+    double m_turbineValve = 100.0;   // % governor opening
+    double m_turbineRpm = 3000.0;    // shaft speed
+    double m_turbineMW = 0.0;        // electrical export
+    bool m_turbineTripped = false;
 
     int m_fuelCount = 0;
     int m_controlCount = 0;

@@ -16,6 +16,7 @@ class QTimer;
 class CoreView;
 class GaugeCard;
 class TrendChart;
+class TurbineView;
 
 /*! The control room: core map, telemetry, rod bank, pumps, channel bay, log. */
 class MainWindow : public QMainWindow
@@ -64,6 +65,7 @@ private:
     QWidget *buildTelemetryCard();
     QWidget *buildBankCard();
     QWidget *buildPumpCard();
+    QWidget *buildTurbineCard();
     QWidget *buildChannelCard();
     QWidget *buildLogDock();
     void installAssembly(rbmk::AssemblyType type);
@@ -99,6 +101,11 @@ private:
     QLabel *m_bankValue = nullptr;
     QLabel *m_bankAverage = nullptr;
     QLabel *m_pumpStatus = nullptr;
+    QLabel *m_turbineValue = nullptr;
+    QLabel *m_turbineValveLabel = nullptr;
+    TurbineView *m_turbineView = nullptr;
+    QPushButton *m_turbineTripButton = nullptr;
+    QPushButton *m_turbineResetButton = nullptr;
 
     QLabel *m_inspCoord = nullptr;
     QLabel *m_inspType = nullptr;
@@ -112,7 +119,8 @@ private:
 
     QSlider *m_bankSlider = nullptr;
     QSlider *m_rodSlider = nullptr;
-    QPushButton *m_pumpButtons[4] = { nullptr, nullptr, nullptr, nullptr };
+    QSlider *m_turbineSlider = nullptr;
+    QVector<QPushButton *> m_pumpButtons;
     QPushButton *m_pauseButton = nullptr;
     QPushButton *m_soundButton = nullptr;
     QPushButton *m_extractButton = nullptr;
