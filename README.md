@@ -40,6 +40,14 @@ before running them. See [`LICENSE`](LICENSE) before redistributing.
 - Compare nominal, low-power, and cold-shutdown starting states.
 - Inspect and test a UI-independent physics engine alongside the Qt control room.
 - Build a 64-bit Windows installer or run directly from a local build.
+- Open independent reactor units via **File → New independent reactor unit**. Each
+  window runs its own simulation, controls, alarms, pause state, and clock; there
+  are no shared plant systems. Closing a unit ends that unit's simulation.
+- Select the **RBMKP-2400 (scaled approximation)** when opening a new unit. This
+  reuses the RBMK-1000 lattice and dynamics, scaling power and thermal energy by
+  7.5. Its nominal 7,500 MWt and 2,400 MWe assume an illustrative 32% conversion
+  efficiency, not a validated design rating or turbine model. It does not model
+  the proposed design's separate sections or steam superheating.
 
 ## Screenshots
 
@@ -112,7 +120,7 @@ powershell -ExecutionPolicy Bypass -File .\installer\build-installer.ps1
 ```
 
 The script stages only the executable and its Qt runtime, then builds
-`out\RBMK-Control-Room-Setup-1.0.0.exe` using Inno Setup 6. It defaults to the
+`out\RBMK-Control-Room-Setup-1.1.0.exe` using Inno Setup 6. It defaults to the
 Qt 6.8.3 MSVC x64 location shown above and `build\vc_redist.x64.exe`; use
 `-QtBin`, `-RedistPath`, `-BuildDir`, or `-IsccPath` to override those paths.
 Provide the official Microsoft Visual C++ x64 Redistributable appropriate for

@@ -7,6 +7,7 @@
 
 class QAction;
 class QComboBox;
+class QCloseEvent;
 class QDoubleSpinBox;
 class QLabel;
 class QPlainTextEdit;
@@ -22,7 +23,8 @@ class MainWindow : public QMainWindow
 {
     Q_OBJECT
 public:
-    explicit MainWindow(QWidget *parent = nullptr);
+    explicit MainWindow(QWidget *parent = nullptr,
+                        rbmk::ReactorModel model = rbmk::ReactorModel::Rbmk1000);
     ~MainWindow() override;
 
     void startSimulation(rbmk::CorePreset preset = rbmk::CorePreset::NominalHot);
@@ -33,6 +35,9 @@ public:
     void selectAllControlRods();
     void clearSelection();
     void copySelection();
+
+protected:
+    void closeEvent(QCloseEvent *event) override;
 
 private slots:
     void refreshUi();

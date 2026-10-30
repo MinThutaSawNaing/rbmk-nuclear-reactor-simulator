@@ -44,7 +44,7 @@ int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
     QApplication::setApplicationName(QStringLiteral("RBMK Control Room"));
-    QApplication::setApplicationVersion(QStringLiteral("1.0.0"));
+    QApplication::setApplicationVersion(QStringLiteral("1.1.0"));
     QApplication::setOrganizationName(QStringLiteral("RBMK Simulation"));
 
     registerTaskbarIdentity();
@@ -117,6 +117,17 @@ int main(int argc, char *argv[])
                            || !demo.isEmpty();
     int selftestFailures = 0;
     if (automated) {
+        if (parser.isSet(selftestOption)) {
+            MainWindow second(nullptr, ReactorModel::Rbmkp2400);
+            second.startSimulation();
+            if (second.core() == window.core()
+                || std::fabs(second.core()->telemetry().powerMWt - 7500.0) > 0.1
+                || std::fabs(second.core()->powerTarget() - 7500.0) > 0.1) {
+                qWarning("FAIL independent RBMKP-2400 unit");
+                ++selftestFailures;
+            }
+            second.close();
+        }
         int shotDelay = 1800;
         if (demo == QStringLiteral("meltdown")) {
             // Educational failure demo: pull every drive out of the core and

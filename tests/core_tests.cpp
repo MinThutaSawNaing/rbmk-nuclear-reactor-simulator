@@ -10,6 +10,7 @@ class CorePhysicsTest : public QObject
 
 private slots:
     void nominalCoreIsCritical();
+    void scaledModelAndIndependentUnits();
     void nominalHoldsPowerAndPressure();
     void coldPresetStaysColdAndDepressurised();
     void rodWorthCurveIsMonotonic();
@@ -56,6 +57,30 @@ private:
         return -1;
     }
 };
+
+void CorePhysicsTest::scaledModelAndIndependentUnits()
+{
+    ReactorCore standard;
+    ReactorCore large;
+    large.setModel(ReactorModel::Rbmkp2400);
+    boot(standard);
+    boot(large);
+    QCOMPARE(large.telemetry().powerMWt, 7500.0);
+    QCOMPARE(large.telemetry().electricMW, 2400.0);
+    large.setPowerTarget(5250.0);
+    QCOMPARE(large.powerTarget(), 5250.0);
+    QCOMPARE(large.telemetry().powerTargetMWt, 5250.0);
+    large.setPump(0, false);
+    QVERIFY(standard.telemetry().pumpCommand[0]);
+    QVERIFY(!large.telemetry().pumpCommand[0]);
+    large.advance(10.0);
+    QCOMPARE(standard.telemetry().simSeconds, 0.0);
+    large.loadPreset(CorePreset::LowPower);
+    QCOMPARE(large.telemetry().powerMWt, 1500.0);
+    large.reset();
+    QCOMPARE(large.telemetry().powerMWt, 1500.0);
+    QCOMPARE(large.model(), ReactorModel::Rbmkp2400);
+}
 
 void CorePhysicsTest::nominalCoreIsCritical()
 {

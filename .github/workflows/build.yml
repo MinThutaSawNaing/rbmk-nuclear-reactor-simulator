@@ -71,6 +71,14 @@ jobs:
           $env:PATH = "$env:QT_ROOT_DIR\bin;$env:PATH"
           ctest --test-dir build --output-on-failure
 
+      - name: Run UI smoke test
+        shell: pwsh
+        run: |
+          $env:PATH = "$env:QT_ROOT_DIR\bin;$env:PATH"
+          $env:QT_QPA_PLATFORM = 'offscreen'
+          $process = Start-Process -FilePath "$PWD/build/RBMK-Control-Room.exe" -ArgumentList '--selftest' -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "UI smoke test failed with exit code $($process.ExitCode)" }
+
       - name: Stage portable bundle
         shell: pwsh
         run: |
@@ -125,7 +133,7 @@ jobs:
         run: |
           $version = '${{ steps.version.outputs.version }}'
           $template = @'
-          Latest automated Windows build of the RBMK-1000 Control Room simulator.
+          Latest automated Windows build of the RBMK Control Room simulator.
 
           * Version: `{0}`
           * Commit: `{1}` by @{2}

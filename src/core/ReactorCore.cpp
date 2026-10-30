@@ -100,8 +100,8 @@ QString simStamp(double seconds)
 QString presetName(CorePreset preset)
 {
     switch (preset) {
-    case CorePreset::NominalHot:   return QStringLiteral("Nominal 1000 MWt (hot, equilibrium xenon)");
-    case CorePreset::LowPower:     return QStringLiteral("Low power 200 MWt (xenon poisoned)");
+    case CorePreset::NominalHot:   return QStringLiteral("Nominal hot (equilibrium xenon)");
+    case CorePreset::LowPower:     return QStringLiteral("Low power (xenon poisoned)");
     case CorePreset::ColdShutdown: return QStringLiteral("Cold shutdown (all rods inserted)");
     }
     return QString();
@@ -437,7 +437,7 @@ void ReactorCore::setPowerTarget(double mwt)
         return;
     }
 
-    m_powerTarget = clampd(mwt, 5.0, 1450.0);
+    m_powerTarget = clampd(mwt / powerScale(), 5.0, 1450.0);
     const bool wasEngaged = m_autoHold;
     m_autoHold = true;
 
@@ -449,9 +449,9 @@ void ReactorCore::setPowerTarget(double mwt)
                       : (lnError > 0.0 ? AutoHoldState::Raising : AutoHoldState::Lowering);
     emitLog(wasEngaged
                 ? QStringLiteral("AUTO HOLD: power target changed to %1 MWt.")
-                      .arg(m_powerTarget, 0, 'f', 0)
+                      .arg(powerTarget(), 0, 'f', 0)
                 : QStringLiteral("AUTO HOLD engaged: the bank will be trimmed until the core holds "
-                                 "%1 MWt.").arg(m_powerTarget, 0, 'f', 0),
+                                 "%1 MWt.").arg(powerTarget(), 0, 'f', 0),
             3);
     refreshTelemetry();
     emit stateUpdated();
@@ -1133,8 +1133,8 @@ void ReactorCore::updateSpatialReadout()
 void ReactorCore::refreshTelemetry()
 {
     Telemetry &t = m_telemetry;
-    t.powerMWt = m_power;
-    t.electricMW = m_power * 0.32; // typical RBMK net efficiency
+    t.powerMWt = m_power * powerScale();
+    t.electricMW = t.powerMWt * 0.32; // illustrative efficiency, not a turbine model
     t.fuelTempC = m_fuelTemp;
     t.coolantTempC = m_coolantTemp;
     t.pressureAtm = m_pressure;
@@ -1151,7 +1151,7 @@ void ReactorCore::refreshTelemetry()
     t.orm = computeOrm();
     t.integrity = m_integrity;
     t.burnup = m_burnup;
-    t.energyMWh = m_energyMWh;
+    t.energyMWh = m_energyMWh * powerScale();
     t.simSeconds = m_simSeconds;
     t.bankTarget = m_bankTarget;
 
@@ -1187,9 +1187,9 @@ void ReactorCore::refreshTelemetry()
 
     // --- power hold controller readout --------------------------------------
     t.autoHold = m_autoHold;
-    t.powerTargetMWt = m_autoHold ? m_powerTarget : 0.0;
+    t.powerTargetMWt = m_autoHold ? powerTarget() : 0.0;
     t.autoHoldState = static_cast<int>(m_autoHold ? m_autoState : AutoHoldState::Off);
-    const QString targetText = QStringLiteral("%1 MWt").arg(m_powerTarget, 0, 'f', 0);
+    const QString targetText = QStringLiteral("%1 MWt").arg(powerTarget(), 0, 'f', 0);
     const QString bankText = QStringLiteral("bank %1 %").arg(m_bankTarget, 0, 'f', 1);
     switch (m_autoHold ? m_autoState : AutoHoldState::Off) {
     case AutoHoldState::Holding:

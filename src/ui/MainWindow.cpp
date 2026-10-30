@@ -9,6 +9,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QClipboard>
+#include <QCloseEvent>
 #include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -103,16 +104,22 @@ double presetPower(CorePreset preset)
 } // namespace
 
 // -----------------------------------------------------------------------------
-MainWindow::MainWindow(QWidget *parent)
+MainWindow::MainWindow(QWidget *parent, ReactorModel model)
     : QMainWindow(parent)
 {
     m_core = new ReactorCore(this);
+    m_core->setModel(model);
 
-    setWindowTitle(QStringLiteral("RBMK-1000 Control Room  —  Core Physics Sandbox"));
+    static int nextUnit = 1;
+    const int unit = nextUnit++;
+    setWindowTitle(model == ReactorModel::Rbmkp2400
+                       ? QStringLiteral("Unit %1 — RBMKP-2400 scaled approximation").arg(unit)
+                       : QStringLiteral("Unit %1 — RBMK-1000 Control Room").arg(unit));
     resize(1680, 1000);
     setMinimumSize(1360, 780);
 
     buildUi();
+    m_chart->setPowerScale(m_core->powerScale());
     buildMenus();
 
     connect(m_core, &ReactorCore::stateUpdated, this, &MainWindow::refreshUi);
@@ -142,6 +149,13 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow() = default;
 
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    m_core->stop();
+    m_chartTimer->stop();
+    QMainWindow::closeEvent(event);
+}
+
 void MainWindow::startSimulation(CorePreset preset)
 {
     m_core->stop();
@@ -156,12 +170,12 @@ void MainWindow::startSimulation(CorePreset preset)
     // until they ask for one.
     {
         const QSignalBlocker blocker(m_powerTargetSpin);
-        m_powerTargetSpin->setValue(presetPower(preset));
+        m_powerTargetSpin->setValue(presetPower(preset) * m_core->powerScale());
     }
     if (preset == CorePreset::ColdShutdown)
         m_core->clearPowerTarget();
     else
-        m_core->setPowerTarget(presetPower(preset));
+        m_core->setPowerTarget(presetPower(preset) * m_core->powerScale());
 
     refreshUi();
     if (preset == CorePreset::ColdShutdown) {
@@ -170,7 +184,7 @@ void MainWindow::startSimulation(CorePreset preset)
     } else {
         setHint(QStringLiteral("Reactor at %1 MWt with AUTO HOLD engaged. Type the megawatt "
                                "you want in POWER TARGET - the bank follows automatically.")
-                    .arg(presetPower(preset), 0, 'f', 0));
+                    .arg(presetPower(preset) * m_core->powerScale(), 0, 'f', 0));
     }
 }
 
@@ -261,10 +275,13 @@ QWidget *MainWindow::buildHeader()
     auto *titleLayout = new QVBoxLayout(titleBlock);
     titleLayout->setContentsMargins(0, 0, 0, 0);
     titleLayout->setSpacing(1);
-    auto *title = new QLabel(QStringLiteral("RBMK-1000  ELENA"));
+    auto *title = new QLabel(m_core->model() == ReactorModel::Rbmkp2400
+                                 ? QStringLiteral("RBMKP-2400  APPROXIMATION")
+                                 : QStringLiteral("RBMK-1000  ELENA"));
     title->setObjectName(QStringLiteral("AppTitle"));
-    auto *subtitle = new QLabel(QStringLiteral("upper biological shield IZ-250  //  "
-                                               "every channel is insertable and removable"));
+    auto *subtitle = new QLabel(m_core->model() == ReactorModel::Rbmkp2400
+        ? QStringLiteral("scaled RBMK-1000 model // not sectional or superheated")
+        : QStringLiteral("upper biological shield IZ-250  //  every channel is insertable and removable"));
     subtitle->setObjectName(QStringLiteral("AppSubtitle"));
     titleLayout->addWidget(title);
     titleLayout->addWidget(subtitle);
@@ -299,8 +316,8 @@ QWidget *MainWindow::buildHeader()
     auto *presetRow = new QHBoxLayout;
     presetRow->setSpacing(4);
     m_presetCombo = new QComboBox;
-    m_presetCombo->addItem(QStringLiteral("Nominal 1000 MWt"), int(CorePreset::NominalHot));
-    m_presetCombo->addItem(QStringLiteral("Low power 200 MWt"), int(CorePreset::LowPower));
+    m_presetCombo->addItem(QStringLiteral("Nominal %1 MWt").arg(1000 * m_core->powerScale()), int(CorePreset::NominalHot));
+    m_presetCombo->addItem(QStringLiteral("Low power %1 MWt").arg(200 * m_core->powerScale()), int(CorePreset::LowPower));
     m_presetCombo->addItem(QStringLiteral("Cold shutdown"), int(CorePreset::ColdShutdown));
     m_presetCombo->setMinimumWidth(150);
     auto *loadButton = new QPushButton(QStringLiteral("Load"));
@@ -321,11 +338,11 @@ QWidget *MainWindow::buildHeader()
     auto *targetRow = new QHBoxLayout;
     targetRow->setSpacing(4);
     m_powerTargetSpin = new QDoubleSpinBox;
-    m_powerTargetSpin->setRange(10.0, 1450.0);
+    m_powerTargetSpin->setRange(10.0 * m_core->powerScale(), 1450.0 * m_core->powerScale());
     m_powerTargetSpin->setDecimals(0);
     m_powerTargetSpin->setSingleStep(25.0);
     m_powerTargetSpin->setSuffix(QStringLiteral(" MWt"));
-    m_powerTargetSpin->setValue(1000.0);
+    m_powerTargetSpin->setValue(1000.0 * m_core->powerScale());
     m_powerTargetSpin->setKeyboardTracking(false);
     m_powerTargetSpin->setMinimumWidth(104);
     m_powerTargetSpin->setToolTip(QStringLiteral(
@@ -772,6 +789,20 @@ void MainWindow::buildMenus()
 {
     auto *fileMenu = menuBar()->addMenu(QStringLiteral("&File"));
 
+    auto *newUnit = fileMenu->addMenu(QStringLiteral("New independent reactor unit"));
+    const auto addUnit = [newUnit](const QString &name, ReactorModel model) {
+        auto *action = newUnit->addAction(name);
+        QObject::connect(action, &QAction::triggered, qApp, [model] {
+            auto *window = new MainWindow(nullptr, model);
+            window->setAttribute(Qt::WA_DeleteOnClose);
+            window->show();
+            window->startSimulation();
+        });
+    };
+    addUnit(QStringLiteral("RBMK-1000"), ReactorModel::Rbmk1000);
+    addUnit(QStringLiteral("RBMKP-2400 (scaled approximation)"), ReactorModel::Rbmkp2400);
+    fileMenu->addSeparator();
+
     auto *rebuild = fileMenu->addAction(QStringLiteral("Rebuild core / reset state"));
     rebuild->setShortcut(QKeySequence(QStringLiteral("Ctrl+R")));
     connect(rebuild, &QAction::triggered, m_core, &ReactorCore::reset);
@@ -782,8 +813,8 @@ void MainWindow::buildMenus()
         QString text;
         CorePreset preset;
     } presets[3] = {
-        { QStringLiteral("Nominal 1000 MWt"), CorePreset::NominalHot },
-        { QStringLiteral("Low power 200 MWt"), CorePreset::LowPower },
+        { QStringLiteral("Nominal %1 MWt").arg(1000 * m_core->powerScale()), CorePreset::NominalHot },
+        { QStringLiteral("Low power %1 MWt").arg(200 * m_core->powerScale()), CorePreset::LowPower },
         { QStringLiteral("Cold shutdown"), CorePreset::ColdShutdown },
     };
     for (const auto &item : presets) {
@@ -1323,17 +1354,17 @@ void MainWindow::onLoadPreset()
     m_core->loadPreset(preset); // this releases the controller, see below
     {
         const QSignalBlocker blocker(m_powerTargetSpin);
-        m_powerTargetSpin->setValue(presetPower(preset));
+        m_powerTargetSpin->setValue(presetPower(preset) * m_core->powerScale());
     }
     if (preset == CorePreset::ColdShutdown) {
         m_core->clearPowerTarget();
         setHint(QStringLiteral("Core rebuilt: %1. AUTO HOLD is off on a cold core.")
                     .arg(presetName(preset)));
     } else {
-        m_core->setPowerTarget(presetPower(preset));
+        m_core->setPowerTarget(presetPower(preset) * m_core->powerScale());
         setHint(QStringLiteral("Core rebuilt: %1. AUTO HOLD engaged at %2 MWt.")
                     .arg(presetName(preset))
-                    .arg(presetPower(preset), 0, 'f', 0));
+                    .arg(presetPower(preset) * m_core->powerScale(), 0, 'f', 0));
     }
 }
 
@@ -1614,7 +1645,7 @@ void MainWindow::refreshUi()
 
     // --- gauges -------------------------------------------------------------
     m_powerGauge->setReading(QString::number(t.powerMWt, 'f', 0),
-                             t.powerMWt / 3200.0,
+                             t.powerMWt / (3200.0 * m_core->powerScale()),
                              theme::accent(),
                              QStringLiteral("%1 MWe").arg(t.electricMW, 0, 'f', 0));
 
