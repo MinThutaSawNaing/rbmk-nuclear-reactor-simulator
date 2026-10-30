@@ -4,6 +4,7 @@
 #include "ui/Theme.h"
 
 #include <QDateTime>
+#include <QFontMetricsF>
 #include <QLinearGradient>
 #include <QPainter>
 #include <QPainterPath>
@@ -59,6 +60,34 @@ TurbineView::TurbineView(rbmk::ReactorCore *core, QWidget *parent)
         update();
     });
     m_timer->start();
+}
+
+/*! Classify the TG-1 train from telemetry alone.
+ *
+ *  A trip latches the governor shut, so it outranks every other reading; the
+ *  shaft only counts as synchronised once it is inside the grid window and the
+ *  generator is actually exporting.
+ */
+TurbineView::State TurbineView::stateOf(const rbmk::Telemetry &t)
+{
+    if (t.turbineTripped)
+        return State::Tripped;
+    if (t.turbineSynced && t.turbineMW > 1.0)
+        return State::OnGrid;
+    if (t.turbineValvePct < 1.0)
+        return State::GovernorShut;
+    return State::RollingUp;
+}
+
+QString TurbineView::stateLabel(State state)
+{
+    switch (state) {
+    case State::Tripped:      return QStringLiteral("TRIPPED");
+    case State::OnGrid:       return QStringLiteral("ON GRID");
+    case State::GovernorShut: return QStringLiteral("GOVERNOR SHUT");
+    case State::RollingUp:    return QStringLiteral("ROLLING UP");
+    }
+    return QString();
 }
 
 void TurbineView::paintEvent(QPaintEvent *)
@@ -158,12 +187,16 @@ void TurbineView::paintEvent(QPaintEvent *)
                    .arg(t.turbineMW, 0, 'f', 0)
                    .arg(t.turbineValvePct, 0, 'f', 0));
 
-    const bool onGrid = t.turbineSynced && !tripped;
-    const QColor lamp = tripped ? theme::danger() : (onGrid ? theme::success() : theme::warning());
-    const QString lampText = tripped ? QStringLiteral("TRIPPED")
-                                     : (onGrid ? QStringLiteral("ON GRID")
-                                               : QStringLiteral("COASTING"));
-    const QRectF lampRect(w - 106.0, 2.0, 102.0, topBand - 4.0);
+    const State state = stateOf(t);
+    const bool onGrid = state == State::OnGrid;
+    const QColor lamp = state == State::Tripped ? theme::danger()
+                                                : (onGrid ? theme::success() : theme::warning());
+    const QString lampText = stateLabel(state);
+    // Size the lamp to its label - GOVERNOR SHUT is much wider than TRIPPED - but
+    // never past half the band, so the export readout on the left keeps its room.
+    const double lampWidth =
+        qMin(w * 0.52, QFontMetricsF(small).horizontalAdvance(lampText) + 28.0);
+    const QRectF lampRect(w - lampWidth - 2.0, 2.0, lampWidth, topBand - 4.0);
     QColor lampFill = lamp;
     lampFill.setAlphaF(0.16);
     p.setBrush(lampFill);

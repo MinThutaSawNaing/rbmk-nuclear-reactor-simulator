@@ -48,9 +48,11 @@ before running them. See [`LICENSE`](LICENSE) before redistributing.
   uses a larger illustrative 24×24 lattice with more fuel channels than the
   RBMK-1000's 18×18 lattice. The map fits both cores to the same screen space;
   the layout is not a verified physical design. It reuses simplified dynamics,
-  scaling power and thermal energy by 7.5. Its nominal 7,500 MWt and 2,400 MWe assume an illustrative 32% conversion
-  efficiency, not a validated design rating or turbine model. It does not model
-  the proposed design's separate sections or steam superheating.
+  scaling power, thermal energy and turbine export by 7.5. Its nominal 7,500 MWt
+  and 2,400 MWe come from that scaling, not from a validated design rating: the
+  steam train is the same simplified governor/turbine model used on the
+  RBMK-1000. It does not model the proposed design's separate sections or steam
+  superheating.
 
 ## Screenshots
 

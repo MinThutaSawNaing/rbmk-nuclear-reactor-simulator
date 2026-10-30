@@ -64,7 +64,6 @@ struct Channel
 struct Telemetry
 {
     double powerMWt = 0.0;
-    double electricMW = 0.0;
     double fuelTempC = 0.0;
     double coolantTempC = 0.0;
     double pressureAtm = 0.0;
@@ -93,10 +92,10 @@ struct Telemetry
     int totalChannels = 0;
     int rodsBelowHalf = 0;
 
-    //! One flag per main circulation pump. A 2400 MW-class core needs more than
-    //! four MCPs, so these are sized at run time by ReactorCore::pumpCount().
+    //! One flag per main circulation pump, in MCP-1..MCP-n order; true = running.
+    //! The vector is sized at run time by ReactorCore::pumpCount() - eight on the
+    //! 2400 MW-class machine, where a four-pump train cannot carry the heat load.
     QVector<bool> pumps;
-    QVector<bool> pumpCommand;
     int pumpCount = 0;
 
     // ---- steam turbine / generator train -----------------------------------

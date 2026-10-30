@@ -1717,7 +1717,7 @@ void MainWindow::refreshUi()
     m_powerGauge->setReading(QString::number(t.powerMWt, 'f', 0),
                              t.powerMWt / (3200.0 * m_core->powerScale()),
                              theme::accent(),
-                             QStringLiteral("%1 MWe").arg(t.electricMW, 0, 'f', 0));
+                             QStringLiteral("%1 MWe").arg(t.turbineMW, 0, 'f', 0));
 
     m_fuelGauge->setReading(QString::number(t.fuelTempC, 'f', 0),
                             t.fuelTempC / 1500.0,
@@ -1822,9 +1822,9 @@ void MainWindow::refreshUi()
                               .arg(runningPumps)
                               .arg(t.pumpCount)
                               .arg(t.flowPct, 0, 'f', 0));
-    for (int i = 0; i < m_pumpButtons.size() && i < t.pumpCommand.size(); ++i) {
+    for (int i = 0; i < m_pumpButtons.size() && i < t.pumps.size(); ++i) {
         const QSignalBlocker blocker(m_pumpButtons[i]);
-        const bool online = t.pumpCommand.at(i);
+        const bool online = t.pumps.at(i);
         m_pumpButtons[i]->setChecked(online);
         m_pumpButtons[i]->setToolTip(QStringLiteral("MCP-%1 %2").arg(i + 1)
                                          .arg(online ? QStringLiteral("ONLINE")
@@ -1843,27 +1843,19 @@ void MainWindow::refreshUi()
     if (m_turbineResetButton)
         m_turbineResetButton->setEnabled(t.turbineTripped);
     if (m_turbineValue) {
-        QString state;
-        QColor color;
-        if (t.turbineTripped) {
-            state = QStringLiteral("TRIPPED");
+        // Same classifier the painted lamp uses, so card and drawing always agree.
+        const TurbineView::State state = TurbineView::stateOf(t);
+        QColor color = theme::warning();
+        if (state == TurbineView::State::Tripped)
             color = theme::danger();
-        } else if (t.turbineSynced && t.turbineMW > 1.0) {
-            state = QStringLiteral("ON GRID");
+        else if (state == TurbineView::State::OnGrid)
             color = theme::success();
-        } else if (t.turbineValvePct < 1.0) {
-            state = QStringLiteral("GOVERNOR SHUT");
-            color = theme::warning();
-        } else {
-            state = QStringLiteral("ROLLING UP");
-            color = theme::warning();
-        }
         // One line only: the governor percentage already has its own readout on
         // the slider row, and a wrapped label would push the card off the column.
         m_turbineValue->setText(QStringLiteral("%1 rpm  ·  %2 MWe  ·  %3")
                                     .arg(t.turbineRpm, 0, 'f', 0)
                                     .arg(t.turbineMW, 0, 'f', 0)
-                                    .arg(state));
+                                    .arg(TurbineView::stateLabel(state)));
         m_turbineValue->setStyleSheet(QStringLiteral("color:%1;").arg(color.name()));
         m_turbineValue->setToolTip(QStringLiteral("TG-1 shaft speed %1 rpm, %2 MWe exported, "
                                                   "governor valve %3 %.")

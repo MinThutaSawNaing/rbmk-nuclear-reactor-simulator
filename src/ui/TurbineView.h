@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/ReactorTypes.h"
+
 #include <QWidget>
 
 class QTimer;
@@ -23,7 +25,14 @@ class TurbineView : public QWidget
 {
     Q_OBJECT
 public:
+    //! Operator-facing state of the machine. The painted lamp and the card text
+    //! both come from here, so the two can never disagree about the train.
+    enum class State { Tripped, OnGrid, GovernorShut, RollingUp };
+
     explicit TurbineView(rbmk::ReactorCore *core, QWidget *parent = nullptr);
+
+    static State stateOf(const rbmk::Telemetry &t);
+    static QString stateLabel(State state);
 
     QSize sizeHint() const override { return QSize(340, 168); }
     QSize minimumSizeHint() const override { return QSize(240, 124); }

@@ -74,13 +74,15 @@ void CorePhysicsTest::scaledModelAndIndependentUnits()
     QVERIFY(large.telemetry().controlChannels > standard.telemetry().controlChannels);
     QVERIFY(std::fabs(large.telemetry().reactivityDollars) < 0.12);
     QCOMPARE(large.telemetry().powerMWt, 7500.0);
-    QCOMPARE(large.telemetry().electricMW, 2400.0);
+    // The turbine export carries the same 7.5x scale, so the approximation
+    // reports megawatts at the generator rather than core units.
+    QCOMPARE(large.telemetry().turbineMW, 2400.0);
     large.setPowerTarget(5250.0);
     QCOMPARE(large.powerTarget(), 5250.0);
     QCOMPARE(large.telemetry().powerTargetMWt, 5250.0);
     large.setPump(0, false);
-    QVERIFY(standard.telemetry().pumpCommand[0]);
-    QVERIFY(!large.telemetry().pumpCommand[0]);
+    QVERIFY(standard.telemetry().pumps[0]);
+    QVERIFY(!large.telemetry().pumps[0]);
     large.advance(10.0);
     QCOMPARE(standard.telemetry().simSeconds, 0.0);
     large.loadPreset(CorePreset::LowPower);
@@ -274,7 +276,6 @@ void CorePhysicsTest::turbineFollowsGovernorAndTrips()
     QVERIFY(core.telemetry().turbineRpm > 2900.0);
     QVERIFY(core.telemetry().turbineSynced);
     QVERIFY(core.telemetry().turbineMW > 250.0);
-    QCOMPARE(core.telemetry().electricMW, core.telemetry().turbineMW);
 
     // Closing the governor drops the export but leaves the reactor alone
     const double power = core.telemetry().powerMWt;

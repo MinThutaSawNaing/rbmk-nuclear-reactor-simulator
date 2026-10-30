@@ -1297,15 +1297,13 @@ void ReactorCore::refreshTelemetry()
 
     t.pumpCount = m_pumpCount;
     t.pumps = m_pumpCommand;
-    t.pumpCommand = m_pumpCommand;
 
     t.turbineRpm = m_turbineRpm;
     t.turbineValvePct = m_turbineValve;
     // Export follows the turbine, not the core: a cold core or a tripped machine
-    // exports nothing. Both readings carry the model's power scale so the
+    // exports nothing. The reading carries the model's power scale so the
     // RBMKP-2400 approximation reports megawatts rather than core units.
     t.turbineMW = m_turbineMW * powerScale();
-    t.electricMW = t.turbineMW;
     t.turbineTripped = m_turbineTripped;
     t.turbineSynced = !m_turbineTripped && m_turbineRpm >= 2950.0;
     t.scrammed = m_scrammed;
