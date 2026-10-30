@@ -31,6 +31,8 @@ private slots:
     void autoHoldDrivesPowerToTarget();
     void autoHoldHoldsThroughXenonTransient();
     void autoHoldStartsAColdCore();
+    void coldStartBuildsSteam_data();
+    void coldStartBuildsSteam();
     void autoHoldReleasesOnManualBankMove();
     void autoHoldReportsWhenNoDriveFollowsTheBank();
     void autoHoldRefusesWhileScrammed();
@@ -475,6 +477,65 @@ void CorePhysicsTest::autoHoldStartsAColdCore()
     QVERIFY(t.autoHoldState == int(AutoHoldState::Holding)
             || t.autoHoldState == int(AutoHoldState::Raising)
             || t.autoHoldState == int(AutoHoldState::Lowering));
+}
+
+void CorePhysicsTest::coldStartBuildsSteam_data()
+{
+    QTest::addColumn<int>("model");
+    QTest::addColumn<double>("target");
+    QTest::newRow("1000-half-load") << int(ReactorModel::Rbmk1000) << 500.0;
+    QTest::newRow("1000-nominal") << int(ReactorModel::Rbmk1000) << 1000.0;
+    QTest::newRow("2400-half-load") << int(ReactorModel::Rbmkp2400) << 3750.0;
+    QTest::newRow("2400-nominal") << int(ReactorModel::Rbmkp2400) << 7500.0;
+}
+
+void CorePhysicsTest::coldStartBuildsSteam()
+{
+    QFETCH(int, model);
+    QFETCH(double, target);
+    ReactorCore core;
+    core.setModel(ReactorModel(model));
+    core.initialize(CorePreset::ColdShutdown);
+    core.stop();
+    QCOMPARE(core.telemetry().inletTempC, 40.0);
+    QCOMPARE(core.telemetry().turbineRpm, 0.0);
+    core.setPowerTarget(target);
+    core.setTurbineValve(50.0);
+
+    double firstSteam = 0.0;
+    for (int i = 0; i < 180; ++i) {
+        core.advance(10.0);
+        const auto &t = core.telemetry();
+        if (firstSteam == 0.0 && t.pressureAtm > 12.0)
+            firstSteam = t.simSeconds;
+        QVERIFY(!t.destroyed);
+        QVERIFY(!t.pipeRupture);
+        QVERIFY(t.integrity > 0.98);
+        QCOMPARE(t.flowPct, 100.0);
+        for (const bool running : t.pumps)
+            QVERIFY(running);
+    }
+    const auto &t = core.telemetry();
+    qInfo("Steam reached at %.0f simulated seconds; final inlet %.1f C, pressure %.1f atm, turbine %.0f rpm",
+          firstSteam, t.inletTempC, t.pressureAtm, t.turbineRpm);
+    QVERIFY2(firstSteam > 0.0, qPrintable(QStringLiteral("No steam: inlet %1, coolant %2, power %3")
+        .arg(t.inletTempC).arg(t.coolantTempC).arg(t.powerMWt)));
+    QVERIFY(firstSteam > 10.0); // heat must accumulate, not jump to a hot preset
+    QVERIFY(t.inletTempC > 260.0);
+    QVERIFY(t.pressureAtm > 20.0);
+    QVERIFY(t.turbineSynced);
+    QVERIFY(t.turbineMW > target * 0.10);
+    QVERIFY(std::fabs(t.powerMWt - target) < target * 0.08);
+
+    core.reset();
+    QCOMPARE(core.telemetry().inletTempC, 40.0);
+    QCOMPARE(core.telemetry().turbineRpm, 0.0);
+    core.loadPreset(CorePreset::ColdShutdown);
+    QVERIFY(!core.autoHoldEngaged());
+    core.advance(600.0);
+    QVERIFY(core.telemetry().inletTempC < 60.0);
+    QVERIFY(core.telemetry().pressureAtm < 12.0);
+    QCOMPARE(core.telemetry().turbineRpm, 0.0);
 }
 
 void CorePhysicsTest::autoHoldReleasesOnManualBankMove()

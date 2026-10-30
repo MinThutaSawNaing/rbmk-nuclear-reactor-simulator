@@ -191,7 +191,7 @@ private:
     double m_coolantTemp = 284.0;     // degC
     double m_pressure = 68.0;         // atm
     double m_flow = 100.0;            // %
-    double m_inletTemp = 270.0;       // degC, depends on how the core was started
+    double m_inletTemp = 270.0;       // degC, return water warms with recirculated heat
     double m_xenon = 1.0;             // normalised, 1.0 = equilibrium at 1000 MWt
     double m_iodine = 1.0;
     double m_void = 0.0;              // 0..1

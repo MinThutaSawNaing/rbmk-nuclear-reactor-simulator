@@ -2000,6 +2000,14 @@ temperature and flow: a relief valve opens at 118 atm, and above 140 atm the pri
 circuit can rupture (coolant inventory lost, residual flow only).</p>
 
 <h3>TURBINE AND GENERATOR</h3>
+<p><b>Cold start:</b> keep all circulation pumps running, set POWER TARGET to
+500 MWt (RBMK-1000) or 3750 MWt (RBMKP-2400), and engage AUTO HOLD. Open the turbine
+governor to 50 % or more; if tripped, use Reset / roll up. Resume if paused and
+allow the recirculating coolant to warm up (10x or 20x time speeds up the wait).
+The coolant card shows rising inlet temperature. WAITING FOR STEAM is expected
+until pressure exceeds 12 atm; at 20 atm or more the shaft can reach rated speed.
+The cold circuit retains reactor heat instead of continuously replacing it with
+40 C water. This is an accelerated educational model, not a plant procedure.</p>
 <p>The TG-1 turbo-generator card carries the governor valve, a trip button and a
 reset / roll-up button, with a live 3-D view of the machine. The governor sets steam
 admission, and electrical export is thermal power x net efficiency x admission x the

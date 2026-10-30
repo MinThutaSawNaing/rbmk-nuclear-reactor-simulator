@@ -65,6 +65,25 @@ For scripted launches, use `--reactor 1000` or `--reactor 2400` with
 `--preset nominal` or `--preset cold`. Explicit reactor/preset/hold options and
 automated screenshot/self-test/demo runs skip the launcher.
 
+### Making steam from a cold start
+
+1. Leave **all eight circulation pumps running** and resume the simulation if paused.
+2. Set **POWER TARGET** to **500 MWt** on RBMK-1000 or **3,750 MWt** on the
+   RBMKP-2400 approximation, then engage **AUTO HOLD**. Nominal targets of
+   1,000 / 7,500 MWt also work. A cold session starts with AUTO HOLD off.
+3. Open the turbine **GOVERNOR** to **50%** or more. If tripped, use
+   **Reset / roll up** to clear the trip and open it to 100%.
+4. Let the circuit warm up; **10x / 20x** simulation speed shortens the wait.
+   The coolant card shows inlet temperature rising as the return water stores
+   reactor heat. Above **12 atm** the turbine begins receiving steam; with
+   **20 atm** or more it can reach rated speed and **ON GRID**.
+
+This is a simplified, accelerated game warm-up, not a real plant startup
+procedure. Opening the governor alone does not heat a shutdown reactor. The
+return water no longer acts as an infinite 40 C heat sink: it retains heat below
+the normal 270 C return temperature, while the existing hot-state heat rejection
+is preserved. Turbine-to-reactor back-pressure feedback is still not modeled.
+
 The turbine panel shows an illustrative HP/LP multi-stage cutaway, a common
 shaft, bearings, and a stationary generator casing. Rotation is visually slowed
 for readability, stops at zero RPM, freezes on pause, and follows coast-down.

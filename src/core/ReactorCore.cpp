@@ -39,6 +39,7 @@ constexpr double kOrmDanger       = 6.0;
 // ------------------------------------------------------- thermal hydraulics
 constexpr double kFuelHeatCap     = 30.0;     // MW*s/degC
 constexpr double kCoolHeatCap     = 45.0;     // MW*s/degC
+constexpr double kReturnHeatCap   = 90.0;     // MW*s/degC, recirculating return water
 constexpr double kFuelToCoolant   = 3.0;      // MW/degC
 constexpr double kFlowHeatRemoval = 71.0;     // MW/degC at 100 % flow
 constexpr double kInletTemp       = 270.0;    // degC
@@ -1055,8 +1056,18 @@ void ReactorCore::step(double dt)
     const double heatToCoolant = hArea * (m_fuelTemp - m_coolantTemp);   // MW
     const double heatRemoved = kFlowHeatRemoval * flowFrac * (m_coolantTemp - m_inletTemp);
 
+    // Circulation transfers heat into return water, not an infinite 40 C sink.
+    // During cold startup that water stores heat until the loop can make steam.
+    // The simplified secondary heat sink rejects heat above the normal return
+    // temperature. At a hot inlet of 270 C, rejection equals heatRemoved, so
+    // the existing hot-state heat balance is unchanged. No external heater or
+    // turbine-dependent feedback is introduced.
+    const double heatRejected = kFlowHeatRemoval * flowFrac
+                                * std::max(0.0, m_coolantTemp - kInletTemp);
+
     m_fuelTemp += (m_power - heatToCoolant) * dt / (kFuelHeatCap * fuelScale);
     m_coolantTemp += (heatToCoolant - heatRemoved) * dt / kCoolHeatCap;
+    m_inletTemp += (heatRemoved - heatRejected) * dt / kReturnHeatCap;
     m_fuelTemp = clampd(m_fuelTemp, 5.0, 3000.0);
     m_coolantTemp = clampd(m_coolantTemp, 5.0, 1200.0);
 
