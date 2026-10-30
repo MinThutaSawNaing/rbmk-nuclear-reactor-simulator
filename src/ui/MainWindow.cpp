@@ -533,7 +533,7 @@ QWidget *MainWindow::buildBankCard()
     connect(m_bankSlider, &QSlider::valueChanged, this, &MainWindow::onBankSliderChanged);
     layout->addWidget(m_bankSlider);
 
-    m_bankAverage = new QLabel(QStringLiteral("30 drives  ·  avg 43.0 %  ·  ORM 12.9"));
+    m_bankAverage = new QLabel(QStringLiteral("drive bank"));
     m_bankAverage->setObjectName(QStringLiteral("Hint"));
     m_bankAverage->setWordWrap(true);
     layout->addWidget(m_bankAverage);
@@ -1806,9 +1806,9 @@ void MainWindow::showManual()
 </style>
 <h2>RBMK-1000 ELENA — CORE PHYSICS SANDBOX</h2>
 <p>There are no missions, objectives or scripted faults. The reactor is a physical
-system: whatever happens is the consequence of what you do to it. Every one of the
-248 channels can be emptied or reloaded, and every control rod drive can be moved
-on its own.</p>
+system: whatever happens is the consequence of what you do to it. Every core
+socket can be emptied or reloaded, and every installed control rod drive can be
+moved on its own.</p>
 
 <h3>THE CORE MAP</h3>
 <ul>
@@ -1830,9 +1830,9 @@ on its own.</p>
 
 <h3>ASSEMBLIES (all insertable and removable)</h3>
 <ul>
-<li><b>Fuel bundle</b> — contributes +7 $ of excess reactivity across the as-built load
-    (180 channels). Removing fuel lowers reactivity, adding fuel raises it.</li>
-<li><b>Control rod drive</b> — 8.5 $ total worth across the as-built 30 drives, weighted
+<li><b>Fuel bundle</b> — contributes +7 $ of excess reactivity across the as-built fuel
+    load. Removing fuel lowers reactivity, adding fuel raises it.</li>
+<li><b>Control rod drive</b> — 8.5 $ total worth across the as-built drive set, weighted
     radially (centre rods are worth more). Worth follows an S-curve, so a rod at 50 %
     is worth half of its full stroke. Each drive travels at 14 %/s.</li>
 <li><b>Water reflector</b> — small positive worth (+0.008 $ per column versus as-built).</li>

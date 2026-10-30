@@ -78,9 +78,9 @@ are no objectives, no scripted faults and no score. The reactor simply responds 
 you do to it, and instability (positive void feedback, xenon poisoning, loss of shutdown
 margin, prompt criticality, fuel damage) is an emergent consequence of those choices.
 
-Every one of the 248 core sockets is a physical channel that can be emptied or reloaded
-with a fuel bundle, a control rod drive or a water reflector column, and **all 30 control
-rod drives can be moved independently** of the bank. An automatic power controller can
+Every core socket is a physical channel that can be emptied or reloaded with a fuel
+bundle, a control rod drive or a water reflector column, and **every installed control
+rod drive can be moved independently** of the bank. An automatic power controller can
 hold any megawatt you dial in, by solving the rod-worth curve against the live core.
 
 ## Build
